@@ -38,6 +38,31 @@ document.addEventListener('DOMContentLoaded', () => {
   
   if (window.initAuth) window.initAuth();
 
+  // Lógica de instalación PWA
+  let deferredPrompt;
+  const installBtn = document.getElementById('pwa-install-btn');
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Evitar que Chrome muestre el mini-infobar automáticamente
+    e.preventDefault();
+    deferredPrompt = e;
+    // Mostrar nuestro botón de instalar
+    if (installBtn) installBtn.classList.remove('hidden');
+  });
+
+  if (installBtn) {
+    installBtn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      // Ocultar botón después de hacer click
+      installBtn.classList.add('hidden');
+      // Mostrar el prompt nativo
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      console.log(`Decisión del usuario: ${outcome}`);
+      deferredPrompt = null;
+    });
+  }
+
   // Register Service Worker for PWA (only if not on file:// protocol)
   if ('serviceWorker' in navigator && window.location.protocol !== 'file:') {
     window.addEventListener('load', () => {
