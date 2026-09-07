@@ -26,6 +26,7 @@ document.querySelectorAll('.sidebar nav a').forEach((link) => {
     document.getElementById(`view-${link.dataset.view}`).classList.remove('hidden');
     if (link.dataset.view === 'usuarios') cargarUsuarios();
     if (link.dataset.view === 'inventario') cargarInventario();
+    if (link.dataset.view === 'historial') cargarHistorial();
   });
 });
 
@@ -113,6 +114,37 @@ async function cargarTareas() {
         showView('view-task', tarea._id);
       });
       grid.appendChild(card);
+    });
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+// --- Historial de tareas cerradas ---
+async function cargarHistorial() {
+  try {
+    const tareas = await apiFetch('/tasks/historical');
+    const list = document.getElementById('historial-list');
+    const empty = document.getElementById('historial-empty');
+    if (!list) return;
+    list.innerHTML = '';
+
+    if (tareas.length === 0) {
+      empty.classList.remove('hidden');
+      return;
+    }
+    empty.classList.add('hidden');
+
+    tareas.forEach((tarea) => {
+      const item = document.createElement('div');
+      item.className = 'report-entry';
+      item.style.cursor = 'pointer';
+      const fechaStr = tarea.completedAt ? new Date(tarea.completedAt).toLocaleString() : 'Fecha desconocida';
+      item.innerHTML = `<strong>${tarea.titulo}</strong> — Cerrada el: ${fechaStr}`;
+      item.addEventListener('click', () => {
+        showView('view-task', tarea._id);
+      });
+      list.appendChild(item);
     });
   } catch (err) {
     alert(err.message);

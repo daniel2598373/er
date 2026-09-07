@@ -30,8 +30,12 @@ if (typeof io !== 'undefined') {
   socket = io(API_BASE);
   socket.on('task_updated', (data) => {
     if (data.taskId === taskId) {
-      cargarTarea();
-      if (usuario.rol !== 'empleado') cargarHistorico();
+      if (data.tipo === 'nuevo_reporte') {
+        if (usuario.rol !== 'empleado') cargarHistorico();
+      } else {
+        cargarTarea();
+        if (usuario.rol !== 'empleado') cargarHistorico();
+      }
     }
   });
 }
@@ -82,13 +86,32 @@ async function cargarTarea() {
 
     const fotosDiv = document.getElementById('task-fotos-referencia');
     fotosDiv.innerHTML = '';
-    (tarea.fotosReferencia || []).forEach((src) => {
-      const img = document.createElement('img');
-      img.src = src;
-      img.style.cursor = 'pointer';
-      img.addEventListener('click', () => abrirVisorImagen(src));
-      fotosDiv.appendChild(img);
-    });
+    
+    if (tarea.tieneFotos) {
+      const btnVerFotos = document.createElement('button');
+      btnVerFotos.className = 'btn-secondary';
+      btnVerFotos.style = 'font-size: 13px; padding: 6px 12px; margin-bottom: 10px;';
+      btnVerFotos.textContent = '📷 Cargar Fotos de Referencia';
+      btnVerFotos.onclick = async () => {
+        btnVerFotos.textContent = 'Cargando...';
+        btnVerFotos.disabled = true;
+        try {
+          const fotos = await apiFetch(`/tasks/${taskId}/images`);
+          btnVerFotos.remove();
+          fotos.forEach((src) => {
+            const img = document.createElement('img');
+            img.src = src;
+            img.style.cursor = 'pointer';
+            img.addEventListener('click', () => abrirVisorImagen(src));
+            fotosDiv.appendChild(img);
+          });
+        } catch (e) {
+          btnVerFotos.textContent = 'Error al cargar';
+          alert(e.message);
+        }
+      };
+      fotosDiv.appendChild(btnVerFotos);
+    }
 
     // --- Lógica de Tiradas ---
     const tiradas = tarea.tiradas || [];
@@ -135,16 +158,41 @@ async function cargarHistorico() {
 
     reportes.forEach((r) => {
       const fecha = new Date(r.createdAt).toLocaleString();
-      const fotosHtml = (r.fotos || [])
-        .map((src) => `<img src="${src}" style="cursor:pointer;" onclick="abrirVisorImagen('${src}')">`)
-        .join('');
       const entry = document.createElement('div');
       entry.className = 'report-entry';
-      entry.innerHTML = `
+      
+      let html = `
         <div class="report-meta">${r.autor?.nombre || 'Usuario'} (${r.autor?.rol || ''}) — ${fecha}</div>
         <p>${r.comentario}</p>
-        <div class="photo-strip">${fotosHtml}</div>
+        <div class="photo-strip" id="photos-report-${r._id}"></div>
       `;
+      entry.innerHTML = html;
+
+      if (r.tieneFotos) {
+        const strip = entry.querySelector('.photo-strip');
+        const btn = document.createElement('button');
+        btn.className = 'btn-secondary';
+        btn.style = 'font-size: 11px; padding: 4px 8px; margin-top: 5px;';
+        btn.textContent = '📷 Ver Evidencias';
+        btn.onclick = async () => {
+          btn.textContent = 'Cargando...';
+          btn.disabled = true;
+          try {
+            const fotos = await apiFetch(`/tasks/${taskId}/reports/${r._id}/images`);
+            btn.remove();
+            fotos.forEach((src) => {
+              const img = document.createElement('img');
+              img.src = src;
+              img.style.cursor = 'pointer';
+              img.addEventListener('click', () => abrirVisorImagen(src));
+              strip.appendChild(img);
+            });
+          } catch(e) {
+            btn.textContent = 'Error';
+          }
+        };
+        strip.appendChild(btn);
+      }
       list.appendChild(entry);
     });
   } catch (err) {

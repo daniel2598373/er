@@ -53,6 +53,7 @@
           <a href="#" data-view="crear-tarea" id="nav-crear-tarea">Crear tarea</a>
           <a href="#" data-view="usuarios" id="nav-usuarios">Usuarios</a>
           <a href="#" data-view="inventario" id="nav-inventario">Inventario (Bobinas)</a>
+          <a href="#" data-view="historial" id="nav-historial">Historial</a>
         </nav>
         <div style="padding:16px 20px;">
           <p class="meta" id="admin-user-name" style="margin-bottom:10px;"></p>
@@ -65,6 +66,12 @@
           <h2 style="margin-top:0;">Todas las tareas</h2>
           <div id="admin-task-grid" class="task-grid"></div>
           <p class="empty-state hidden" id="tareas-empty">Todavía no hay tareas creadas.</p>
+        </section>
+
+        <section id="view-historial" class="hidden">
+          <h2 style="margin-top:0;">Historial de Tareas Finalizadas</h2>
+          <div id="historial-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+          <p class="empty-state hidden" id="historial-empty">No hay tareas finalizadas.</p>
         </section>
 
         <section id="view-crear-tarea" class="hidden">
