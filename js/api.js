@@ -1,8 +1,5 @@
-// URL del servidor: detecta si estas en local o en produccion (GitHub Pages)
-// TODO: Reemplaza "https://tu-backend-real.com" con la URL de tu servidor en Render/Heroku/DigitalOcean
-const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:'
-  ? 'http://localhost:3009' 
-  : 'https://tu-backend-real.com';
+// URL del servidor (apuntando a Produccion en Render)
+const API_BASE = 'https://server-er.onrender.com';
 
 function getToken() {
   return localStorage.getItem('token');
