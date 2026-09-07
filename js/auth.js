@@ -23,6 +23,7 @@ window.initAuth = function() {
 
       if (typeof showView === 'function') {
         showView(data.usuario.rol === 'empleado' ? 'view-dashboard' : 'view-admin');
+        if (window.subscribeToPush) window.subscribeToPush();
       }
     } catch (err) {
       errorEl.textContent = err.message;

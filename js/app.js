@@ -32,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (token && userStr) {
     const user = JSON.parse(userStr);
     showView(user.rol === 'empleado' ? 'view-dashboard' : 'view-admin');
+    if (window.subscribeToPush) setTimeout(window.subscribeToPush, 2000); // Wait 2s to not block initial render
   } else {
     showView('view-login');
   }
@@ -72,3 +73,40 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+
+// PUSH NOTIFICATIONS
+window.subscribeToPush = async function() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+
+    const registration = await navigator.serviceWorker.ready;
+    const vapidResponse = await apiFetch('/push/vapidPublicKey');
+    const vapidPublicKey = vapidResponse.publicKey;
+    
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
+    }
+
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
+    });
+
+    await apiFetch('/push/subscribe', {
+      method: 'POST',
+      body: JSON.stringify(subscription)
+    });
+    console.log('Push subscription successful');
+  } catch (err) {
+    console.error('Push subscription failed:', err);
+  }
+};

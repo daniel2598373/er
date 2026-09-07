@@ -67,19 +67,23 @@ async function cargarTarea() {
     if (usuario.rol === 'empleado') {
       const formSection = document.getElementById('report-form-section');
       const vistoBuenoMsg = document.getElementById('msg-visto-bueno');
+      const esperandoMsg = document.getElementById('msg-esperando-revision');
       const reqEvidenciaMsg = document.getElementById('msg-requiere-evidencia');
       
+      // Reiniciar estado
+      formSection.classList.add('hidden');
+      vistoBuenoMsg.classList.add('hidden');
+      if (esperandoMsg) esperandoMsg.classList.add('hidden');
+      reqEvidenciaMsg.classList.add('hidden');
+
       if (tarea.estado === 'revisada') {
-        formSection.classList.add('hidden');
         vistoBuenoMsg.classList.remove('hidden');
+      } else if (tarea.estado === 'enviada') {
+        if (esperandoMsg) esperandoMsg.classList.remove('hidden');
       } else {
         formSection.classList.remove('hidden');
-        vistoBuenoMsg.classList.add('hidden');
-        
         if (tarea.estado === 'requiere_evidencia') {
           reqEvidenciaMsg.classList.remove('hidden');
-        } else {
-          reqEvidenciaMsg.classList.add('hidden');
         }
       }
     }
@@ -91,7 +95,7 @@ async function cargarTarea() {
       const btnVerFotos = document.createElement('button');
       btnVerFotos.className = 'btn-secondary';
       btnVerFotos.style = 'font-size: 13px; padding: 6px 12px; margin-bottom: 10px;';
-      btnVerFotos.textContent = '📷 Cargar Fotos de Referencia';
+      btnVerFotos.textContent = '📷 Ver Archivos de Referencia';
       btnVerFotos.onclick = async () => {
         btnVerFotos.textContent = 'Cargando...';
         btnVerFotos.disabled = true;
@@ -99,11 +103,21 @@ async function cargarTarea() {
           const fotos = await apiFetch(`/tasks/${taskId}/images`);
           btnVerFotos.remove();
           fotos.forEach((src) => {
-            const img = document.createElement('img');
-            img.src = src;
-            img.style.cursor = 'pointer';
-            img.addEventListener('click', () => abrirVisorImagen(src));
-            fotosDiv.appendChild(img);
+            if (src.startsWith('data:application/pdf')) {
+              const a = document.createElement('a');
+              a.href = src;
+              a.download = `documento_${Date.now()}.pdf`;
+              a.className = 'btn-secondary';
+              a.style = 'display: block; font-size: 13px; padding: 6px 12px; margin-bottom: 10px; width: fit-content; text-decoration: none;';
+              a.innerHTML = '📄 Descargar Documento PDF';
+              fotosDiv.appendChild(a);
+            } else {
+              const img = document.createElement('img');
+              img.src = src;
+              img.style.cursor = 'pointer';
+              img.addEventListener('click', () => abrirVisorImagen(src));
+              fotosDiv.appendChild(img);
+            }
           });
         } catch (e) {
           btnVerFotos.textContent = 'Error al cargar';
@@ -181,11 +195,21 @@ async function cargarHistorico() {
             const fotos = await apiFetch(`/tasks/${taskId}/reports/${r._id}/images`);
             btn.remove();
             fotos.forEach((src) => {
-              const img = document.createElement('img');
-              img.src = src;
-              img.style.cursor = 'pointer';
-              img.addEventListener('click', () => abrirVisorImagen(src));
-              strip.appendChild(img);
+              if (src.startsWith('data:application/pdf')) {
+                const a = document.createElement('a');
+                a.href = src;
+                a.download = `evidencia_${Date.now()}.pdf`;
+                a.className = 'btn-secondary';
+                a.style = 'display: inline-block; font-size: 11px; padding: 4px 8px; margin: 2px; text-decoration: none;';
+                a.innerHTML = '📄 Descargar PDF';
+                strip.appendChild(a);
+              } else {
+                const img = document.createElement('img');
+                img.src = src;
+                img.style.cursor = 'pointer';
+                img.addEventListener('click', () => abrirVisorImagen(src));
+                strip.appendChild(img);
+              }
             });
           } catch(e) {
             btn.textContent = 'Error';

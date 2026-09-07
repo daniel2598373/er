@@ -93,8 +93,8 @@
             <input type="text" id="contacto">
             <label for="asignadoA">Asignar a</label>
             <select id="asignadoA" required></select>
-            <label for="fotosReferencia">Fotos de referencia (opcional)</label>
-            <input type="file" id="fotosReferencia" accept="image/*" multiple>
+            <label for="fotosReferencia">Archivos de referencia (Fotos/PDF) (opcional)</label>
+            <input type="file" id="fotosReferencia" accept="image/*, application/pdf" multiple>
 
             <label>Bobinas Disponibles (opcional)</label>
             <div style="background: rgba(0,0,0,0.02); padding: 15px; border-radius: var(--radius-sm); margin-bottom: 20px;">
@@ -225,12 +225,17 @@
         <form id="report-form">
           <label for="comentario">Comentario del avance</label>
           <textarea id="comentario" required placeholder="Describe lo que se hizo..."></textarea>
-          <label for="fotos">Fotos de Evidencia (opcional)</label>
-          <input type="file" id="fotos" accept="image/*" multiple>
+          <label for="fotos">Evidencia (Fotos/PDF) (opcional)</label>
+          <input type="file" id="fotos" accept="image/*, application/pdf" multiple>
           <div class="action-buttons">
             <button type="submit" class="btn-primary">Enviar Reporte de Avance</button>
           </div>
         </form>
+      </div>
+
+      <div class="detail-section glass-panel hidden" id="msg-esperando-revision" style="text-align: center;">
+        <h2 style="color: #f59e0b; font-size: 24px; border: none; margin-bottom: 5px;">⏳ En Revisión</h2>
+        <p style="color: var(--text-muted); font-size: 15px;">Has enviado tu avance. Por favor espera a que el administrador lo revise y te dé el Visto Bueno o te solicite más evidencia.</p>
       </div>
 
       <div class="detail-section glass-panel hidden" id="msg-visto-bueno" style="text-align: center;">

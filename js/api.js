@@ -55,6 +55,9 @@ function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
+      if (file.type === 'application/pdf') {
+        return resolve(e.target.result);
+      }
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
