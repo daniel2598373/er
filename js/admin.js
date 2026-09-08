@@ -360,6 +360,11 @@ const userForm = document.getElementById('user-form');
 if (userForm) {
   userForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const btn = userForm.querySelector('button[type="submit"]');
+    const originalText = btn.textContent;
+    btn.textContent = 'Cargando...';
+    btn.disabled = true;
+
     const body = {
       nombre: document.getElementById('nombre').value.trim(),
       username: document.getElementById('username').value.trim(),
@@ -371,18 +376,67 @@ if (userForm) {
       userForm.reset();
       cargarUsuarios();
       cargarEmpleadosParaSelect();
+      alert('Usuario creado correctamente');
     } catch (err) {
       alert(err.message);
+    } finally {
+      btn.textContent = originalText;
+      btn.disabled = false;
     }
   });
 }
+
+window.eliminarUsuario = async function(id) {
+  if (!confirm('¿Estás seguro de que deseas eliminar a este usuario? Esta acción no se puede deshacer.')) return;
+  try {
+    await apiFetch(`/admin/users/${id}`, { method: 'DELETE' });
+    cargarUsuarios();
+  } catch (err) {
+    alert(err.message);
+  }
+};
+
+window.editarUsuario = async function(id, nombreActual, rolActual) {
+  const nuevoNombre = prompt('Editar Nombre:', nombreActual);
+  if (nuevoNombre === null) return; // Cancelado
+  
+  const nuevoRol = prompt('Editar Rol (empleado, dom, admin):', rolActual);
+  if (nuevoRol === null) return; // Cancelado
+  
+  const body = {};
+  if (nuevoNombre.trim() !== '') body.nombre = nuevoNombre.trim();
+  if (['empleado', 'dom', 'admin'].includes(nuevoRol.trim())) body.rol = nuevoRol.trim();
+  else if (nuevoRol.trim() !== '') return alert('Rol inválido. Debe ser: empleado, dom o admin.');
+
+  const nuevaPass = prompt('Nueva contraseña (deja en blanco para no cambiar):');
+  if (nuevaPass && nuevaPass.trim() !== '') {
+    body.password = nuevaPass;
+  }
+
+  try {
+    await apiFetch(`/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    cargarUsuarios();
+  } catch (err) {
+    alert(err.message);
+  }
+};
 
 async function cargarUsuarios() {
   try {
     const users = await apiFetch('/admin/users');
     const list = document.getElementById('user-list');
     list.innerHTML = users
-      .map((u) => `<div class="report-entry"><strong>${u.nombre}</strong> — ${u.username} <span class="badge">${u.rol}</span></div>`)
+      .map((u) => `
+        <div class="report-entry" style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <strong>${u.nombre}</strong> — ${u.username} <span class="badge">${u.rol}</span>
+          </div>
+          <div>
+            <button class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="editarUsuario('${u._id}', '${u.nombre}', '${u.rol}')">Editar</button>
+            <button class="btn-danger" style="font-size: 11px; padding: 4px 8px; margin-left: 5px;" onclick="eliminarUsuario('${u._id}')">Borrar</button>
+          </div>
+        </div>
+      `)
       .join('');
   } catch (err) {
     alert(err.message);
@@ -394,6 +448,11 @@ const bobinaForm = document.getElementById('bobina-form');
 if (bobinaForm) {
   bobinaForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    const btn = bobinaForm.querySelector('button[type="submit"]');
+    const originalText = btn.textContent;
+    btn.textContent = 'Cargando...';
+    btn.disabled = true;
+
     const body = {
       nombre: document.getElementById('bobina-nombre-inv').value.trim(),
       metrosIniciales: Number(document.getElementById('bobina-metros-inv').value),
@@ -404,9 +463,41 @@ if (bobinaForm) {
       cargarInventario();
     } catch (err) {
       alert(err.message);
+    } finally {
+      btn.textContent = originalText;
+      btn.disabled = false;
     }
   });
 }
+
+window.eliminarBobina = async function(id) {
+  if (!confirm('¿Estás seguro de eliminar esta bobina del inventario?')) return;
+  try {
+    await apiFetch(`/inventory/${id}`, { method: 'DELETE' });
+    cargarInventario();
+  } catch (err) {
+    alert(err.message);
+  }
+};
+
+window.editarBobina = async function(id, nombreActual, metrosActuales) {
+  const nuevoNombre = prompt('Editar Nombre de la bobina:', nombreActual);
+  if (nuevoNombre === null) return;
+  
+  const nuevosMetros = prompt('Editar Metros Iniciales:', metrosActuales);
+  if (nuevosMetros === null) return;
+
+  const body = {};
+  if (nuevoNombre.trim() !== '') body.nombre = nuevoNombre.trim();
+  if (Number(nuevosMetros) > 0) body.metrosIniciales = Number(nuevosMetros);
+
+  try {
+    await apiFetch(`/inventory/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    cargarInventario();
+  } catch (err) {
+    alert(err.message);
+  }
+};
 
 async function cargarInventario() {
   try {
@@ -418,6 +509,17 @@ async function cargarInventario() {
                             b.estado === 'asignada' ? 'var(--warning)' : 
                             'var(--danger)';
         const taskAsignada = b.tareaActual ? `(Asignada a: ${b.tareaActual.titulo})` : '';
+        
+        let botonesStr = '';
+        if (b.estado === 'disponible') {
+          botonesStr = `
+            <div>
+              <button class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="editarBobina('${b._id}', '${b.nombre}', ${b.metrosIniciales})">Editar</button>
+              <button class="btn-danger" style="font-size: 11px; padding: 4px 8px; margin-left: 5px;" onclick="eliminarBobina('${b._id}')">Borrar</button>
+            </div>
+          `;
+        }
+
         return `
           <div class="report-entry" style="display: flex; justify-content: space-between; align-items: center;">
             <div>
@@ -425,6 +527,7 @@ async function cargarInventario() {
               <br><span style="font-size: 11px; color: ${statusColor}; font-weight: bold;">[${b.estado.toUpperCase()}]</span> 
               <span style="font-size: 11px; color: var(--text-muted);">${taskAsignada}</span>
             </div>
+            ${botonesStr}
           </div>
         `;
       })

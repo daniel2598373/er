@@ -43,6 +43,31 @@ if (typeof io !== 'undefined') {
 // Mostrar solo las secciones que le corresponden al rol
 if (usuario.rol !== 'empleado') {
   document.getElementById('report-form-section').classList.add('hidden');
+  
+  if (usuario.rol === 'admin') {
+    const btnEliminarTarea = document.getElementById('btn-eliminar-tarea');
+    if (btnEliminarTarea) {
+      btnEliminarTarea.classList.remove('hidden');
+      // Clonar para evitar múltiples listeners si initTask se llama varias veces
+      const newBtnElim = btnEliminarTarea.cloneNode(true);
+      btnEliminarTarea.parentNode.replaceChild(newBtnElim, btnEliminarTarea);
+      
+      newBtnElim.addEventListener('click', async () => {
+        if (!confirm('¿Estás seguro de que deseas eliminar esta tarea? Esto liberará las bobinas asignadas y no se puede deshacer.')) return;
+        newBtnElim.textContent = 'Eliminando...';
+        newBtnElim.disabled = true;
+        try {
+          await apiFetch(`/admin/tasks/${taskId}`, { method: 'DELETE' });
+          alert('Tarea eliminada correctamente');
+          showView('view-admin');
+        } catch (e) {
+          alert(e.message);
+          newBtnElim.textContent = 'Eliminar Tarea';
+          newBtnElim.disabled = false;
+        }
+      });
+    }
+  }
 } else {
   // El empleado no ve el histórico ni los botones de estado
   document.getElementById('status-section').classList.add('hidden');
@@ -533,7 +558,7 @@ function renderTiradas(tiradas) {
     return;
   }
 
-  tiradas.forEach(t => {
+  tiradas.forEach((t, index) => {
     const isEmpleado = usuario.rol === 'empleado';
     const card = document.createElement('div');
     card.className = `tirada-card ${t.cortado ? 'cortado' : ''}`;
@@ -542,10 +567,14 @@ function renderTiradas(tiradas) {
     const catLabels = { camaras: 'Cámara', aps: 'Access Point', nodos: 'Nodo', control_acceso: 'Ctrl. Acceso' };
     const catLabel = catLabels[t.categoria] || t.categoria;
 
+    // Delete button logic (only if task is not closed and we have manageForm)
+    const canManage = document.getElementById('manage-tiradas-form') && !document.getElementById('manage-tiradas-form').classList.contains('hidden');
+    const deleteBtnHtml = canManage ? `<button class="btn-danger" style="font-size: 10px; padding: 2px 6px; margin-left: 10px;" onclick="eliminarTirada(${index})">X</button>` : '';
+
     let contentHtml = `
       <div style="display: flex; align-items: center; justify-content: space-between;">
         <div style="display: flex; flex-direction: column; gap: 4px;">
-          <strong style="font-size: 16px;">${t.nombre}</strong>
+          <strong style="font-size: 16px;">${t.nombre} ${deleteBtnHtml}</strong>
           <span style="font-size: 12px; color: var(--text-muted);">${catLabel}</span>
           ${t.bobinaAsignada ? `<span style="font-size: 12px; color: var(--accent-primary); font-weight: 500;">🔌 Cortar de: ${t.bobinaAsignada}</span>` : ''}
         </div>
@@ -582,6 +611,16 @@ function renderTiradas(tiradas) {
     card.innerHTML = contentHtml;
     list.appendChild(card);
   });
+
+  window.eliminarTirada = async function(index) {
+    if (!confirm('¿Seguro que deseas eliminar esta tirada de cable?')) return;
+    try {
+      await apiFetch(`/tasks/${taskId}/tiradas/${index}`, { method: 'DELETE' });
+      if (!socket) cargarTarea();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
 
   // Agregar Event Listeners para empleado
   if (usuario.rol === 'empleado') {
