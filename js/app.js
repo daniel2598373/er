@@ -1,5 +1,97 @@
 // SPA Router and App Initialization
 
+// --- Custom non-blocking dialogs ---
+window.appAlert = function(message) {
+  if (window.showToast) {
+    window.showToast(message, 'info');
+    return Promise.resolve();
+  }
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:white;padding:24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);max-width:400px;width:90%;text-align:center;font-family:sans-serif;color:black;';
+    const msgEl = document.createElement('p');
+    msgEl.style.cssText = 'margin-bottom:20px;font-size:1.1rem;white-space:pre-wrap;';
+    msgEl.textContent = message;
+    const btnOk = document.createElement('button');
+    btnOk.textContent = 'OK';
+    btnOk.style.cssText = 'padding:8px 16px;border:none;background:#3b82f6;border-radius:6px;cursor:pointer;color:white;font-weight:bold;font-size:1rem;';
+    btnOk.onclick = () => { overlay.remove(); resolve(); };
+    box.appendChild(msgEl);
+    box.appendChild(btnOk);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  });
+};
+
+window.appConfirm = function(message) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:white;padding:24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);max-width:400px;width:90%;text-align:center;font-family:sans-serif;color:black;';
+    const msgEl = document.createElement('p');
+    msgEl.style.cssText = 'margin-bottom:20px;font-size:1.1rem;white-space:pre-wrap;';
+    msgEl.textContent = message;
+    const btnGroup = document.createElement('div');
+    btnGroup.style.cssText = 'display:flex;gap:10px;justify-content:center;';
+    const btnCancel = document.createElement('button');
+    btnCancel.textContent = 'Cancelar';
+    btnCancel.style.cssText = 'padding:8px 16px;border:1px solid #cbd5e1;background:white;border-radius:6px;cursor:pointer;color:#475569;font-weight:bold;font-size:1rem;flex:1;';
+    const btnOk = document.createElement('button');
+    btnOk.textContent = 'Confirmar';
+    btnOk.style.cssText = 'padding:8px 16px;border:none;background:#ef4444;border-radius:6px;cursor:pointer;color:white;font-weight:bold;font-size:1rem;flex:1;';
+    btnCancel.onclick = () => { overlay.remove(); resolve(false); };
+    btnOk.onclick = () => { overlay.remove(); resolve(true); };
+    btnGroup.appendChild(btnCancel);
+    btnGroup.appendChild(btnOk);
+    box.appendChild(msgEl);
+    box.appendChild(btnGroup);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  });
+};
+
+window.appPrompt = function(message, defaultValue = '') {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:white;padding:24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);max-width:400px;width:90%;text-align:center;font-family:sans-serif;color:black;';
+    const msgEl = document.createElement('p');
+    msgEl.style.cssText = 'margin-bottom:15px;font-size:1.1rem;white-space:pre-wrap;';
+    msgEl.textContent = message;
+    const inputEl = document.createElement('input');
+    inputEl.type = 'text';
+    inputEl.value = defaultValue;
+    inputEl.style.cssText = 'width:100%;padding:10px;margin-bottom:20px;border:1px solid #cbd5e1;border-radius:6px;font-size:1rem;box-sizing:border-box;color:black;';
+    const btnGroup = document.createElement('div');
+    btnGroup.style.cssText = 'display:flex;gap:10px;justify-content:center;';
+    const btnCancel = document.createElement('button');
+    btnCancel.textContent = 'Cancelar';
+    btnCancel.style.cssText = 'padding:8px 16px;border:1px solid #cbd5e1;background:white;border-radius:6px;cursor:pointer;color:#475569;font-weight:bold;font-size:1rem;flex:1;';
+    const btnOk = document.createElement('button');
+    btnOk.textContent = 'Aceptar';
+    btnOk.style.cssText = 'padding:8px 16px;border:none;background:#3b82f6;border-radius:6px;cursor:pointer;color:white;font-weight:bold;font-size:1rem;flex:1;';
+    btnCancel.onclick = () => { overlay.remove(); resolve(null); };
+    btnOk.onclick = () => { overlay.remove(); resolve(inputEl.value); };
+    inputEl.onkeydown = (e) => { if(e.key === 'Enter') btnOk.click(); };
+    btnGroup.appendChild(btnCancel);
+    btnGroup.appendChild(btnOk);
+    box.appendChild(msgEl);
+    box.appendChild(inputEl);
+    box.appendChild(btnGroup);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    setTimeout(() => inputEl.focus(), 100);
+  });
+};
+
+window.alert = function(msg) { window.appAlert(msg); };
+// For confirm/prompt we can't override them cleanly since they are sync, so we must find/replace them in code.
+
+
 function showView(viewId, param = null) {
   document.querySelectorAll('.view-container').forEach(el => el.classList.add('hidden'));
   const view = document.getElementById(viewId);

@@ -29,6 +29,7 @@ let socket;
 if (typeof io !== 'undefined') {
   socket = io(API_BASE);
   socket.on('task_updated', (data) => {
+    if (window.isDeletingTask) return; // Ignorar actualizaciones mientras eliminamos para evitar alertas dobles
     if (data.taskId === taskId) {
       if (data.tipo === 'nuevo_reporte') {
         if (usuario.rol !== 'empleado') cargarHistorico();
@@ -53,19 +54,25 @@ if (usuario.rol !== 'empleado') {
       btnEliminarTarea.parentNode.replaceChild(newBtnElim, btnEliminarTarea);
       
       newBtnElim.addEventListener('click', async () => {
-        if (!confirm('¿Estás seguro de que deseas eliminar esta tarea? Esto liberará las bobinas asignadas y no se puede deshacer.')) return;
+        if (!await window.appConfirm('¿Estás seguro de que deseas eliminar esta tarea? Esto liberará las bobinas asignadas y no se puede deshacer.')) return;
         newBtnElim.textContent = 'Eliminando...';
         newBtnElim.disabled = true;
+        window.isDeletingTask = true;
         try {
           await apiFetch(`/admin/tasks/${taskId}`, { method: 'DELETE' });
           alert('Tarea eliminada correctamente');
+          newBtnElim.textContent = 'Eliminar Tarea';
+          newBtnElim.disabled = false;
+          window.isDeletingTask = false;
           showView('view-admin');
         } catch (e) {
           alert(e.message);
           newBtnElim.textContent = 'Eliminar Tarea';
           newBtnElim.disabled = false;
+          window.isDeletingTask = false;
         }
       });
+
     }
   }
 } else {
@@ -74,12 +81,49 @@ if (usuario.rol !== 'empleado') {
   document.getElementById('historico-section').classList.add('hidden');
 }
 
+let currentTareaObj = null;
 async function cargarTarea() {
   try {
     const tarea = await apiFetch(`/tasks/${taskId}`);
+    currentTareaObj = tarea;
     document.getElementById('task-title').textContent = tarea.titulo;
     document.getElementById('task-descripcion').textContent = tarea.descripcion;
     document.getElementById('task-prioridad').textContent = PRIORIDAD_LABEL[tarea.prioridad];
+
+    // Auto-rellenar campos del entregable desde la tarea
+    const eNombreTrabajo = document.getElementById('e-nombre-trabajo');
+    const eDesc = document.getElementById('e-descripcion');
+    const eFolio = document.getElementById('e-folio');
+    // Si la tarea tiene cotizacionId (ya sea por la BD o incrustado en la descripcion), pre-llenar el folio del entregable
+    let extractedCot = null;
+    let cleanDesc = tarea.descripcion || '';
+    
+    let permitirExtras = false;
+    const matchExtras = cleanDesc.match(/\[Permitir extras:\s*(.*?)\]/);
+    if (matchExtras) {
+      if (matchExtras[1] === 'SI') permitirExtras = true;
+      cleanDesc = cleanDesc.replace(/\[Permitir extras:\s*.*?\]/, '').trim();
+    }
+    
+    const match = cleanDesc.match(/\[Folio Cotización:\s*(.*?)\]/);
+    if (match) {
+        extractedCot = match[1];
+        cleanDesc = cleanDesc.replace(/\[Folio Cotización:\s*.*?\]/, '').trim();
+    }
+    
+    // Guardar si se permiten extras en el objeto global de la tarea para usarlo después
+    tarea.permitirExtras = permitirExtras;
+    
+    if (eNombreTrabajo && !eNombreTrabajo.value) eNombreTrabajo.value = tarea.titulo || '';
+    if (eDesc && !eDesc.value) eDesc.value = cleanDesc;
+    
+    const finalCot = tarea.cotizacionId || extractedCot;
+    if (eFolio && !eFolio.value && finalCot) {
+        eFolio.value = finalCot;
+    }
+    
+    // Y también limpiar la descripción visual de la tarea en la interfaz principal
+    document.getElementById('task-descripcion').textContent = cleanDesc;
     
     const badgeEstado = document.getElementById('task-estado');
     badgeEstado.textContent = ESTADO_LABEL[tarea.estado];
@@ -170,8 +214,27 @@ async function cargarTarea() {
     if (manageForm) {
       if (tarea.estado === 'revisada') {
         manageForm.classList.add('hidden');
+      } else if (usuario.rol === 'empleado' && !tarea.permitirExtras) {
+        manageForm.classList.add('hidden');
       } else {
         manageForm.classList.remove('hidden');
+      }
+    }
+
+    // Ocultar opciones de admin (entregable, aprobar, rechazar) si la tarea ya está cerrada
+    const eFormSec = document.getElementById('entregable-form-section');
+    const statusSec = document.getElementById('status-section');
+    if (tarea.estado === 'revisada') {
+      if (eFormSec) eFormSec.classList.add('hidden');
+      if (statusSec) statusSec.classList.add('hidden');
+    } else {
+      // Solo mostrar status-section y entregable-form-section si es admin
+      if (usuario.rol !== 'empleado') {
+        if (eFormSec) eFormSec.classList.remove('hidden');
+        if (statusSec) statusSec.classList.remove('hidden');
+      } else {
+        if (eFormSec) eFormSec.classList.add('hidden');
+        if (statusSec) statusSec.classList.add('hidden');
       }
     }
 
@@ -245,7 +308,15 @@ async function cargarHistorico() {
       list.appendChild(entry);
     });
   } catch (err) {
-    alert(err.message);
+    alert('Esta tarea no existe o fue eliminada.');
+    if (typeof showView === 'function') {
+      const u = typeof getUsuario === 'function' ? getUsuario() : (typeof usuario !== 'undefined' ? usuario : null);
+      if (u && u.rol !== 'empleado') {
+        showView('view-admin');
+      } else {
+        showView('view-dashboard');
+      }
+    }
   }
 }
 
@@ -312,6 +383,7 @@ botonesEstado.forEach(btn => {
     if (estado === 'revisada') {
       try {
         const tarea = await apiFetch(`/tasks/${taskId}`);
+    currentTareaObj = tarea;
         if (tarea.bobinas && tarea.bobinas.length > 0) {
           const bobinasSobrantes = tarea.bobinas.filter(b => b.metrosRestantes > 0);
           if (bobinasSobrantes.length > 0) {
@@ -416,6 +488,18 @@ if (toggleTiradas) {
   });
 }
 
+// --- Acordeón para Entregable ---
+const toggleEntregable = document.getElementById('toggle-entregable');
+const entregableContent = document.getElementById('entregable-content');
+const entregableIcon = document.getElementById('entregable-icon');
+
+if (toggleEntregable) {
+  toggleEntregable.addEventListener('click', () => {
+    entregableContent.classList.toggle('hidden');
+    entregableIcon.textContent = entregableContent.classList.contains('hidden') ? '▼' : '▲';
+  });
+}
+
 // --- Toggle Custom Bobina Input ---
 const bobinaMetrosSelect = document.getElementById('bobina-metros');
 const bobinaMetrosCustom = document.getElementById('bobina-metros-custom');
@@ -482,7 +566,7 @@ if (addTiradaForm) {
         const result = optimizarCortes(tareaActual.bobinas || [], [...(tareaActual.tiradas || []), fakeTirada]);
         
         if (!result.stats.esSuficiente) {
-          const res = confirm(`⚠️ ALERTA DE CABLE:\n\nNo hay cable suficiente para esta tirada de ${metrosEstimados}m.\nFaltarán ${result.stats.metrosFaltantes}m en total.\n\n¿Estás seguro de querer guardar esta tirada de todas formas (quedará marcada "Sin cable")?`);
+          const res = await window.appConfirm(`⚠️ ALERTA DE CABLE:\n\nNo hay cable suficiente para esta tirada de ${metrosEstimados}m.\nFaltarán ${result.stats.metrosFaltantes}m en total.\n\n¿Estás seguro de querer guardar esta tirada de todas formas (quedará marcada "Sin cable")?`);
           if (!res) return; // Abortar
         }
       } catch (err) {
@@ -520,6 +604,7 @@ if (btnSimularTask && simuladorResTask) {
     btnSimularTask.textContent = 'Calculando...';
     try {
       const tarea = await apiFetch(`/tasks/${taskId}`);
+    currentTareaObj = tarea;
       const result = optimizarCortes(tarea.bobinas || [], tarea.tiradas || []);
       const stats = result.stats;
 
@@ -613,7 +698,7 @@ function renderTiradas(tiradas) {
   });
 
   window.eliminarTirada = async function(index) {
-    if (!confirm('¿Seguro que deseas eliminar esta tirada de cable?')) return;
+    if (!await window.appConfirm('¿Seguro que deseas eliminar esta tirada de cable?')) return;
     try {
       await apiFetch(`/tasks/${taskId}/tiradas/${index}`, { method: 'DELETE' });
       if (!socket) cargarTarea();
@@ -726,4 +811,181 @@ modalVisor.addEventListener('click', (e) => {
     modalImg.src = '';
   }
 });
+
+  // =========================================================
+  // MÓDULO ENTREGABLE FINAL — espejo de entregables.js
+  // =========================================================
+  const entregableForm = document.getElementById('entregable-form');
+  if (entregableForm) {
+    const EMAIL_API_URL = window.location.protocol === 'file:'
+      ? 'https://server-respaldo-email.onrender.com'
+      : 'https://email.naisata.com';
+
+    let evidenceFiles = [];
+
+    // --- Función helper para setup de canvas ---
+    function setupEntregableCanvas(canvasEl) {
+      const ctx = canvasEl.getContext('2d');
+      ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#000';
+      let drawing = false;
+      const getPos = (ev) => {
+        const rect = canvasEl.getBoundingClientRect();
+        const src = ev.touches ? ev.touches[0] : ev;
+        return {
+          x: (src.clientX - rect.left) * (canvasEl.width / rect.width),
+          y: (src.clientY - rect.top)  * (canvasEl.height / rect.height)
+        };
+      };
+      const begin = (ev) => { ev.preventDefault(); drawing = true; ctx.beginPath(); const p = getPos(ev); ctx.moveTo(p.x, p.y); canvasEl.dataset.touched = 'false'; };
+      const draw  = (ev) => { if (!drawing) return; ev.preventDefault(); const p = getPos(ev); ctx.lineTo(p.x, p.y); ctx.stroke(); canvasEl.dataset.touched = 'true'; };
+      const stop  = () => { drawing = false; };
+      canvasEl.addEventListener('mousedown', begin); canvasEl.addEventListener('mousemove', draw); canvasEl.addEventListener('mouseup', stop); canvasEl.addEventListener('mouseleave', stop);
+      canvasEl.addEventListener('touchstart', begin, { passive: false }); canvasEl.addEventListener('touchmove', draw, { passive: false }); canvasEl.addEventListener('touchend', stop);
+      return { ctx, canvas: canvasEl };
+    }
+
+    const canvasTec = setupEntregableCanvas(document.getElementById('e-canvas-tecnico'));
+    const canvasCli = setupEntregableCanvas(document.getElementById('e-canvas-cliente'));
+
+    document.getElementById('btn-limpiar-firma-tec').addEventListener('click', () => {
+      canvasTec.ctx.clearRect(0, 0, canvasTec.canvas.width, canvasTec.canvas.height);
+      canvasTec.canvas.dataset.touched = 'false';
+    });
+    document.getElementById('btn-limpiar-firma-cli').addEventListener('click', () => {
+      canvasCli.ctx.clearRect(0, 0, canvasCli.canvas.width, canvasCli.canvas.height);
+      canvasCli.canvas.dataset.touched = 'false';
+    });
+
+    // --- Cargar clientes (sites) ---
+    async function cargarSitesParaEntregable() {
+      try {
+        const res = await fetch(`${EMAIL_API_URL}/api/sites`);
+        if (!res.ok) throw new Error('no sites');
+        const sites = await res.json();
+        const sel = document.getElementById('e-site-id');
+        sel.innerHTML = '<option value="">-- Selecciona un cliente --</option>' +
+          sites.map(s => `<option value="${s.id}">${s.nombre || 'Sin nombre'}</option>`).join('');
+      } catch { document.getElementById('e-site-id').innerHTML = '<option value="">Error al cargar clientes</option>'; }
+    }
+
+    // --- Cargar empresas ---
+    async function cargarEmpresasParaEntregable() {
+      try {
+        const res = await fetch(`${EMAIL_API_URL}/api/companies`);
+        if (!res.ok) throw new Error('no companies');
+        const companies = await res.json();
+        const sel = document.getElementById('e-empresa-id');
+        sel.innerHTML = '<option value="">Naisata (por defecto)</option>' +
+          companies.map(c => `<option value="${c.id}">${c.nombre}</option>`).join('');
+      } catch { /* queda el default */ }
+    }
+
+    cargarSitesParaEntregable();
+    cargarEmpresasParaEntregable();
+
+    // Auto-rellenar nombre de técnico con el usuario actual
+    const inputTec = document.getElementById('e-tecnico');
+    if (inputTec && usuario) inputTec.value = `${usuario.nombre || ''} ${usuario.apellido || ''}`.trim();
+
+    // Auto-rellenar título y descripción desde la tarea cuando se cargue
+    const origCargarTarea = typeof cargarTarea === 'function' ? cargarTarea : null;
+    // (El llenado se hace en cargarTarea cuando currentTareaObj esté disponible)
+
+    // --- Fotos: preview y manejo ---
+    function renderEvidencePreviews() {
+      const preview = document.getElementById('e-fotos-preview');
+      preview.innerHTML = '';
+      evidenceFiles.forEach((file, i) => {
+        const url = URL.createObjectURL(file);
+        const div = document.createElement('div');
+        div.style.cssText = 'position:relative; width:72px; height:72px;';
+        div.innerHTML = `<img src="${url}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid #cbd5e1;">
+          <button type="button" style="position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;" data-idx="${i}">✕</button>`;
+        div.querySelector('button').addEventListener('click', () => {
+          URL.revokeObjectURL(url);
+          evidenceFiles.splice(i, 1);
+          document.getElementById('e-fotos-count').textContent = `${evidenceFiles.length} foto(s)`;
+          renderEvidencePreviews();
+        });
+        preview.appendChild(div);
+      });
+    }
+
+    document.getElementById('e-fotos').addEventListener('change', async (ev) => {
+      const incoming = [...ev.target.files];
+      const available = Math.max(0, 15 - evidenceFiles.length);
+      evidenceFiles.push(...incoming.slice(0, available));
+      if (incoming.length > available) alert('Solo se permiten hasta 15 fotos en total.');
+      document.getElementById('e-fotos-count').textContent = `${evidenceFiles.length} foto(s)`;
+      renderEvidencePreviews();
+      ev.target.value = '';
+    });
+
+    // --- Submit ---
+    entregableForm.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+
+      const siteId       = document.getElementById('e-site-id').value;
+      const folio        = document.getElementById('e-folio').value.trim();
+      const nombreTrabajo = document.getElementById('e-nombre-trabajo').value.trim();
+      const descripcion  = document.getElementById('e-descripcion').value.trim();
+
+      if (!siteId || !folio || !nombreTrabajo || !descripcion) {
+        alert('Cliente, Folio, Título y Descripción son obligatorios.');
+        return;
+      }
+
+      const btn = document.getElementById('btn-enviar-entregable');
+      const originalLabel = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando...';
+
+      const formData = new FormData();
+      formData.append('siteId',       siteId);
+      formData.append('folio',        folio);
+      formData.append('nombreTrabajo', nombreTrabajo);
+      formData.append('descripcion',  descripcion);
+      formData.append('vendedor',     document.getElementById('e-vendedor').value.trim());
+      formData.append('ordenCompra',  document.getElementById('e-orden').value.trim());
+      formData.append('nombreTecnico', document.getElementById('e-tecnico').value.trim());
+      if (document.getElementById('e-empresa-id').value)
+        formData.append('empresaId', document.getElementById('e-empresa-id').value);
+
+      // Firmas
+      if (canvasTec.canvas.dataset.touched === 'true')
+        formData.append('firmaTecnico', canvasTec.canvas.toDataURL('image/png'));
+      if (canvasCli.canvas.dataset.touched === 'true')
+        formData.append('firmaCliente', canvasCli.canvas.toDataURL('image/png'));
+
+      // Fotos
+      evidenceFiles.forEach(file => formData.append('fotos', file));
+
+      // Etiqueta de cotización (heredada de la tarea)
+      if (currentTareaObj?.cotizacionId)
+        formData.append('cotizacionId', currentTareaObj.cotizacionId);
+
+      try {
+        const res = await fetch(`${EMAIL_API_URL}/api/tickets`, { method: 'POST', body: formData });
+        if (!res.ok) {
+          let msg = `Error ${res.status}`;
+          try { msg = (await res.json()).error || msg; } catch { /* */ }
+          throw new Error(msg);
+        }
+        alert('✅ Entregable generado y enviado correctamente.');
+        entregableForm.reset();
+        evidenceFiles = [];
+        document.getElementById('e-fotos-count').textContent = '0 foto(s)';
+        document.getElementById('e-fotos-preview').innerHTML = '';
+        canvasTec.ctx.clearRect(0, 0, canvasTec.canvas.width, canvasTec.canvas.height);
+        canvasCli.ctx.clearRect(0, 0, canvasCli.canvas.width, canvasCli.canvas.height);
+        // Volver a rellenar nombre técnico
+        if (inputTec && usuario) inputTec.value = `${usuario.nombre || ''} ${usuario.apellido || ''}`.trim();
+      } catch (err) {
+        alert('❌ ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalLabel;
+      }
+    });
+  }
 };

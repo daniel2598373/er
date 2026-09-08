@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gestión de tareas</title>
-  <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -91,6 +90,10 @@
             <input type="text" id="ubicacion">
             <label for="contacto">Numero de contacto en el sitio</label>
             <input type="text" id="contacto">
+            <label for="cotizacionId">Vincular a Cotización (Opcional)</label>
+            <select id="cotizacionId">
+              <option value="">Sin cotización / Trabajo interno</option>
+            </select>
             <label for="asignadoA">Asignar a</label>
             <select id="asignadoA" required></select>
             <label for="fotosReferencia">Archivos de referencia (Fotos/PDF) (opcional)</label>
@@ -111,6 +114,11 @@
             <div style="margin-bottom: 20px;">
               <button type="button" class="btn-secondary" id="btn-simular-cables" style="width: 100%; border-color: var(--accent-primary); color: var(--accent-primary);">⚡ Simular Asignación de Cable</button>
               <div id="simulador-resultados" class="hidden" style="margin-top: 15px; padding: 15px; border-radius: var(--radius-sm); font-size: 14px;"></div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px; background: rgba(16, 185, 129, 0.1); padding: 10px; border-radius: var(--radius-sm);">
+              <input type="checkbox" id="permitir-extras" style="width: auto; margin: 0; accent-color: #10b981;">
+              <label for="permitir-extras" style="margin: 0; cursor: pointer; font-size: 13px;">Permitir al empleado agregar bobinas y tiradas extra</label>
             </div>
 
             <button type="submit" class="btn-primary">Crear tarea</button>
@@ -148,7 +156,21 @@
             <input type="number" id="bobina-metros-inv" required placeholder="Ej. 305">
             <button type="submit" class="btn-primary">Registrar en Almacén</button>
           </form>
-          <h2 style="margin-top: 20px;">Bodega Actual</h2>
+
+          <h2 style="margin-top: 30px;">Asignar Bobina a Empleado (Sin Tarea)</h2>
+          <form id="asignar-bobina-empleado-form">
+            <label for="asignar-bobina-id">Seleccionar Bobina</label>
+            <select id="asignar-bobina-id" required>
+              <option value="">Cargando bobinas...</option>
+            </select>
+            <label for="asignar-empleado-id">Seleccionar Empleado</label>
+            <select id="asignar-empleado-id" required>
+              <option value="">Cargando empleados...</option>
+            </select>
+            <button type="submit" class="btn-primary">Asignar a Empleado</button>
+          </form>
+
+          <h2 style="margin-top: 30px;">Bodega Actual</h2>
           <div id="inventario-list"></div>
         </section>
       </div>
@@ -232,6 +254,96 @@
             <button type="submit" class="btn-primary">Enviar Reporte de Avance</button>
           </div>
         </form>
+      </div>
+
+      <!-- Entregable Final - versión completa igual a entregables.js -->
+      <div class="detail-section glass-panel" id="entregable-form-section" style="margin-top: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" id="toggle-entregable">
+          <h2 style="margin-bottom: 0; border: none;"><i class="fa-solid fa-file-signature" style="color:#10b981;"></i> Generar Entregable Final (Opcional)</h2>
+          <span id="entregable-icon" style="font-size: 20px;">▼</span>
+        </div>
+        <div id="entregable-content" class="hidden" style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+          <p style="font-size:13px; color:var(--text-muted); margin-bottom:18px;">
+            Crea el reporte técnico de trabajo. Se vinculará automáticamente a la cotización de esta tarea si tiene una asignada.
+          </p>
+          <form id="entregable-form">
+
+          <!-- Cliente (Site) -->
+          <label for="e-site-id">Cliente / Sitio <span style="color:#ef4444;">*</span></label>
+          <select id="e-site-id" required style="width:100%; margin-bottom:12px;">
+            <option value="">Cargando clientes...</option>
+          </select>
+
+          <!-- Folio -->
+          <label for="e-folio">Folio del reporte <span style="color:#ef4444;">*</span></label>
+          <input type="text" id="e-folio" required placeholder="Ej. REP-001" style="margin-bottom:12px;">
+
+          <!-- Nombre del trabajo -->
+          <label for="e-nombre-trabajo">Nombre / Título del trabajo <span style="color:#ef4444;">*</span></label>
+          <input type="text" id="e-nombre-trabajo" required placeholder="Ej. Instalación cámaras área norte" style="margin-bottom:12px;">
+
+          <!-- Descripción -->
+          <label for="e-descripcion">Descripción del trabajo <span style="color:#ef4444;">*</span></label>
+          <textarea id="e-descripcion" required placeholder="Detalla lo que se realizó..." rows="3" style="margin-bottom:12px;"></textarea>
+
+          <!-- Vendedor y Orden de compra en fila -->
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+            <div>
+              <label for="e-vendedor">Vendedor (opcional)</label>
+              <input type="text" id="e-vendedor" placeholder="Nombre del vendedor">
+            </div>
+            <div>
+              <label for="e-orden">Orden de compra (opcional)</label>
+              <input type="text" id="e-orden" placeholder="Ej. OC-1234">
+            </div>
+          </div>
+
+          <!-- Técnico -->
+          <label for="e-tecnico">Nombre del técnico</label>
+          <input type="text" id="e-tecnico" placeholder="Tu nombre" style="margin-bottom:12px;">
+
+          <!-- Empresa -->
+          <label for="e-empresa-id">Empresa emisora</label>
+          <select id="e-empresa-id" style="width:100%; margin-bottom:16px;">
+            <option value="">Naisata (por defecto)</option>
+          </select>
+
+          <!-- Fotos de evidencia -->
+          <label>Fotos de evidencia (hasta 15)</label>
+          <div style="margin-bottom:12px;">
+            <label for="e-fotos" class="btn-secondary" style="cursor:pointer; display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:6px; font-size:13px;">
+              <i class="fa-solid fa-camera"></i> Agregar fotos
+            </label>
+            <input type="file" id="e-fotos" accept="image/*" multiple style="display:none;">
+            <span id="e-fotos-count" style="font-size:12px; color:var(--text-muted); margin-left:10px;">0 foto(s)</span>
+          </div>
+          <div id="e-fotos-preview" style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px;"></div>
+
+          <!-- Firma del técnico -->
+          <label>Firma del Técnico</label>
+          <div style="background:#fff; border:1px solid #cbd5e1; border-radius:8px; margin-bottom:6px; overflow:hidden;">
+            <canvas id="e-canvas-tecnico" width="600" height="180" style="width:100%; touch-action:none; display:block;"></canvas>
+          </div>
+          <button type="button" id="btn-limpiar-firma-tec" class="btn-secondary" style="font-size:12px; padding:5px 12px; margin-bottom:16px;">
+            <i class="fa-solid fa-eraser"></i> Limpiar firma técnico
+          </button>
+
+          <!-- Firma del cliente -->
+          <label>Firma del Cliente (conformidad)</label>
+          <div style="background:#fff; border:1px solid #cbd5e1; border-radius:8px; margin-bottom:6px; overflow:hidden;">
+            <canvas id="e-canvas-cliente" width="600" height="180" style="width:100%; touch-action:none; display:block;"></canvas>
+          </div>
+          <button type="button" id="btn-limpiar-firma-cli" class="btn-secondary" style="font-size:12px; padding:5px 12px; margin-bottom:20px;">
+            <i class="fa-solid fa-eraser"></i> Limpiar firma cliente
+          </button>
+
+          <div class="action-buttons">
+            <button type="submit" id="btn-enviar-entregable" class="btn-primary" style="background-color:#10b981; width:100%;">
+              <i class="fa-solid fa-paper-plane"></i> Generar y Enviar Entregable
+            </button>
+          </div>
+        </form>
+        </div>
       </div>
 
       <div class="detail-section glass-panel hidden" id="msg-esperando-revision" style="text-align: center;">

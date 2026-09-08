@@ -40,7 +40,7 @@ const ESTADO_LABEL = {
 const ORDEN_PRIORIDAD = { alta: 0, media: 1, baja: 2 };
 
 // Función para mostrar notificaciones flotantes (Toast)
-function showToast(message, type = 'info') {
+window.showToast = function showToast(message, type = 'info') {
   const container = document.getElementById('toast-container');
   if (!container) return;
 
@@ -155,54 +155,105 @@ async function cargarHistorial() {
 const taskForm = document.getElementById('task-form');
 if (taskForm) {
   cargarEmpleadosParaSelect();
+  cargarCotizacionesParaSelect();
+
+  async function cargarCotizacionesParaSelect() {
+    try {
+      const CRM_URL = window.location.protocol === 'file:' ? 'https://server-respaldo.onrender.com' : 'https://crm.naisata.com';
+      const res = await fetch(`${CRM_URL}/api/cotizaciones`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const cots = Array.isArray(data) ? data : (data.cotizaciones || data.data || []);
+      // Filtrar solo activas (excluir perdidas/cerradas)
+      const estadosInactivos = ['Perdido', 'Perdida', 'Rechazado', 'Cerrada', 'Terminada'];
+      const activas = cots.filter(c => !estadosInactivos.includes(c.estado));
+      const select = document.getElementById('cotizacionId');
+      if (select) {
+        // Limpiar opciones anteriores (evitar duplicados)
+        select.innerHTML = '<option value="">-- Sin cotización --</option>';
+        activas.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.folio || c._id;
+          opt.textContent = `${c.folio || 'Sin folio'} - ${c.descripcion || c.clienteNombre || 'Sin detalle'}`;
+          select.appendChild(opt);
+        });
+      }
+    } catch (err) {
+      console.warn('No se pudieron cargar las cotizaciones:', err.message);
+    }
+  }
 
   taskForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const fotosInput = document.getElementById('fotosReferencia');
-    const fotosReferencia = fotosInput.files.length ? await filesToBase64(fotosInput.files) : [];
-
-    // Recolectar bobinas dinámicas (IDs de inventario)
-    const bobinaIds = [];
-    document.querySelectorAll('.bobina-row').forEach(row => {
-      const select = row.querySelector('.b-select');
-      if (select) {
-        const selectedOpt = select.options[select.selectedIndex];
-        if (selectedOpt && selectedOpt.value) {
-          bobinaIds.push(selectedOpt.value);
-        }
-      }
-    });
-
-    // Recolectar tiradas dinámicas
-    const tiradas = [];
-    document.querySelectorAll('.tirada-row').forEach(row => {
-      const nombre = row.querySelector('.t-nombre').value.trim();
-      const categoria = row.querySelector('.t-categoria').value;
-      const metrosEstimados = Number(row.querySelector('.t-metros').value);
-      if (nombre && metrosEstimados > 0) {
-        tiradas.push({ nombre, categoria, metrosEstimados });
-      }
-    });
-
-    const body = {
-      titulo: document.getElementById('titulo').value.trim(),
-      descripcion: document.getElementById('descripcion').value.trim(),
-      prioridad: document.getElementById('prioridad').value,
-      ubicacion: document.getElementById('ubicacion').value.trim(),
-      contacto: document.getElementById('contacto').value.trim(),
-      asignadoA: document.getElementById('asignadoA').value,
-      fotosReferencia,
-      bobinaIds,
-      tiradas,
-    };
+    const submitBtn = taskForm.querySelector('button[type="submit"]');
+    const originalText = submitBtn ? submitBtn.textContent : 'Crear Tarea';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Creando...';
+    }
 
     try {
+      const fotosInput = document.getElementById('fotosReferencia');
+      const fotosReferencia = fotosInput.files.length ? await filesToBase64(fotosInput.files) : [];
+
+      // Recolectar bobinas dinámicas (IDs de inventario)
+      const bobinaIds = [];
+      document.querySelectorAll('.bobina-row').forEach(row => {
+        const select = row.querySelector('.b-select');
+        if (select) {
+          const selectedOpt = select.options[select.selectedIndex];
+          if (selectedOpt && selectedOpt.value) {
+            bobinaIds.push(selectedOpt.value);
+          }
+        }
+      });
+
+      // Recolectar tiradas dinámicas
+      const tiradas = [];
+      document.querySelectorAll('.tirada-row').forEach(row => {
+        const nombre = row.querySelector('.t-nombre').value.trim();
+        const categoria = row.querySelector('.t-categoria').value;
+        const metrosEstimados = Number(row.querySelector('.t-metros').value);
+        if (nombre && metrosEstimados > 0) {
+          tiradas.push({ nombre, categoria, metrosEstimados });
+        }
+      });
+
+      const cotValue = document.getElementById('cotizacionId') ? document.getElementById('cotizacionId').value : '';
+      const permitirExtras = document.getElementById('permitir-extras') ? document.getElementById('permitir-extras').checked : false;
+      let descValue = document.getElementById('descripcion').value.trim();
+      
+      if (cotValue) {
+        descValue += `\n\n[Folio Cotización: ${cotValue}]`;
+      }
+      if (permitirExtras) {
+        descValue += `\n\n[Permitir extras: SI]`;
+      }
+
+      const body = {
+        titulo: document.getElementById('titulo').value.trim(),
+        descripcion: descValue,
+        prioridad: document.getElementById('prioridad').value,
+        ubicacion: document.getElementById('ubicacion').value.trim(),
+        contacto: document.getElementById('contacto').value.trim(),
+        asignadoA: document.getElementById('asignadoA').value,
+        cotizacionId: cotValue, // Send it anyway just in case the backend is updated later
+        fotosReferencia,
+        bobinaIds,
+        tiradas,
+      };
+
       await apiFetch('/admin/tasks', { method: 'POST', body: JSON.stringify(body) });
       taskForm.reset();
       alert('Tarea creada correctamente');
       cargarTareas();
     } catch (err) {
       alert(err.message);
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+      }
     }
   });
 
@@ -341,14 +392,24 @@ async function cargarEmpleadosParaSelect() {
   try {
     const users = await apiFetch('/admin/users');
     const select = document.getElementById('asignadoA');
-    select.innerHTML = '';
+    const selectAsignar = document.getElementById('asignar-empleado-id');
+    if (select) select.innerHTML = '';
+    if (selectAsignar) selectAsignar.innerHTML = '<option value="">Seleccionar Empleado...</option>';
     users
       .filter((u) => u.rol === 'empleado' || u.rol === 'user' || u.rol === 'Clase C')
       .forEach((u) => {
-        const opt = document.createElement('option');
-        opt.value = u._id;
-        opt.textContent = u.nombre;
-        select.appendChild(opt);
+        if (select) {
+          const opt = document.createElement('option');
+          opt.value = u._id;
+          opt.textContent = u.nombre;
+          select.appendChild(opt);
+        }
+        if (selectAsignar) {
+          const opt2 = document.createElement('option');
+          opt2.value = u._id;
+          opt2.textContent = u.nombre;
+          selectAsignar.appendChild(opt2);
+        }
       });
   } catch (err) {
     alert(err.message);
@@ -387,7 +448,7 @@ if (userForm) {
 }
 
 window.eliminarUsuario = async function(id) {
-  if (!confirm('¿Estás seguro de que deseas eliminar a este usuario? Esta acción no se puede deshacer.')) return;
+  if (!await window.appConfirm('¿Estás seguro de que deseas eliminar a este usuario? Esta acción no se puede deshacer.')) return;
   try {
     await apiFetch(`/admin/users/${id}`, { method: 'DELETE' });
     cargarUsuarios();
@@ -397,10 +458,10 @@ window.eliminarUsuario = async function(id) {
 };
 
 window.editarUsuario = async function(id, nombreActual, rolActual) {
-  const nuevoNombre = prompt('Editar Nombre:', nombreActual);
+  const nuevoNombre = await window.appPrompt('Editar Nombre:', nombreActual);
   if (nuevoNombre === null) return; // Cancelado
   
-  const nuevoRol = prompt('Editar Rol (empleado, dom, admin):', rolActual);
+  const nuevoRol = await window.appPrompt('Editar Rol (empleado, dom, admin):', rolActual);
   if (nuevoRol === null) return; // Cancelado
   
   const body = {};
@@ -408,7 +469,7 @@ window.editarUsuario = async function(id, nombreActual, rolActual) {
   if (['empleado', 'dom', 'admin'].includes(nuevoRol.trim())) body.rol = nuevoRol.trim();
   else if (nuevoRol.trim() !== '') return alert('Rol inválido. Debe ser: empleado, dom o admin.');
 
-  const nuevaPass = prompt('Nueva contraseña (deja en blanco para no cambiar):');
+  const nuevaPass = await window.appPrompt('Nueva contraseña (deja en blanco para no cambiar):');
   if (nuevaPass && nuevaPass.trim() !== '') {
     body.password = nuevaPass;
   }
@@ -444,6 +505,41 @@ async function cargarUsuarios() {
 }
 
 // --- Inventario (Bobinas) ---
+
+const asignarForm = document.getElementById('asignar-bobina-empleado-form');
+if (asignarForm) {
+  asignarForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const bobinaId = document.getElementById('asignar-bobina-id').value;
+    const empleadoId = document.getElementById('asignar-empleado-id').value;
+    if (!bobinaId || !empleadoId) return alert('Selecciona bobina y empleado');
+    
+    const submitBtn = asignarForm.querySelector('button[type="submit"]');
+    const originalText = submitBtn ? submitBtn.textContent : 'Asignar a Empleado';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Asignando...';
+    }
+
+    try {
+      await apiFetch(`/inventory/${bobinaId}/asignar-empleado`, {
+        method: 'POST',
+        body: JSON.stringify({ empleadoId })
+      });
+      alert('Bobina asignada al empleado correctamente.');
+      asignarForm.reset();
+      cargarInventario();
+    } catch(err) {
+      alert(err.message);
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+      }
+    }
+  });
+}
+
 const bobinaForm = document.getElementById('bobina-form');
 if (bobinaForm) {
   bobinaForm.addEventListener('submit', async (e) => {
@@ -471,7 +567,7 @@ if (bobinaForm) {
 }
 
 window.eliminarBobina = async function(id) {
-  if (!confirm('¿Estás seguro de eliminar esta bobina del inventario?')) return;
+  if (!await window.appConfirm('¿Estás seguro de eliminar esta bobina del inventario?')) return;
   try {
     await apiFetch(`/inventory/${id}`, { method: 'DELETE' });
     cargarInventario();
@@ -481,10 +577,10 @@ window.eliminarBobina = async function(id) {
 };
 
 window.editarBobina = async function(id, nombreActual, metrosActuales) {
-  const nuevoNombre = prompt('Editar Nombre de la bobina:', nombreActual);
+  const nuevoNombre = await window.appPrompt('Editar Nombre de la bobina:', nombreActual);
   if (nuevoNombre === null) return;
   
-  const nuevosMetros = prompt('Editar Metros Iniciales:', metrosActuales);
+  const nuevosMetros = await window.appPrompt('Editar Metros Iniciales:', metrosActuales);
   if (nuevosMetros === null) return;
 
   const body = {};
@@ -503,6 +599,10 @@ async function cargarInventario() {
   try {
     const bobinas = await apiFetch('/inventory');
     const list = document.getElementById('inventario-list');
+        const selectBobina = document.getElementById('asignar-bobina-id');
+    if (selectBobina) {
+      selectBobina.innerHTML = '<option value="">Seleccionar Bobina...</option>' + bobinas.filter(b => b.estado === 'disponible').map(b => `<option value="${b._id}">${b.nombre} (${b.metrosRestantes}m)</option>`).join('');
+    }
     list.innerHTML = bobinas
       .map((b) => {
         const statusColor = b.estado === 'disponible' ? 'var(--success)' : 
