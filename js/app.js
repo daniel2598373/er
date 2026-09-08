@@ -92,14 +92,36 @@ window.alert = function(msg) { window.appAlert(msg); };
 // For confirm/prompt we can't override them cleanly since they are sync, so we must find/replace them in code.
 
 
+// Guardas para evitar que los listeners se dupliquen al navegar entre vistas
+const _viewInitialized = {};
+
 function showView(viewId, param = null) {
   document.querySelectorAll('.view-container').forEach(el => el.classList.add('hidden'));
   const view = document.getElementById(viewId);
   if(view) view.classList.remove('hidden');
 
-  // Trigger init functions if they exist
-  if (viewId === 'view-dashboard' && window.initDashboard) window.initDashboard();
-  if (viewId === 'view-admin' && window.initAdmin) window.initAdmin();
+  // view-dashboard y view-admin: inicializar listeners solo UNA vez;
+  // en visitas posteriores solo recargar datos (las funciones internas lo manejan).
+  if (viewId === 'view-dashboard' && window.initDashboard) {
+    if (!_viewInitialized['view-dashboard']) {
+      _viewInitialized['view-dashboard'] = true;
+      window.initDashboard();
+    } else if (window._dashboardRefresh) {
+      window._dashboardRefresh();
+    }
+  }
+
+  if (viewId === 'view-admin' && window.initAdmin) {
+    if (!_viewInitialized['view-admin']) {
+      _viewInitialized['view-admin'] = true;
+      window.initAdmin();
+    } else if (window._adminRefresh) {
+      window._adminRefresh();
+    }
+  }
+
+  // view-task siempre se re-inicializa porque cada tarea es distinta,
+  // pero la propia función clona botones para limpiar listeners anteriores.
   if (viewId === 'view-task' && window.initTask) window.initTask(param);
 }
 

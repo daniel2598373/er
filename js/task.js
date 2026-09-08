@@ -20,9 +20,9 @@ window.initTask = function(taskIdParam) {
   const userNameEl = document.getElementById('task-user-name');
   if (userNameEl) userNameEl.textContent = usuario.nombre;
   
-  document.getElementById('back-btn').addEventListener('click', () => {
+  document.getElementById('back-btn').onclick = () => {
     showView(usuario.rol === 'empleado' ? 'view-dashboard' : 'view-admin');
-  });
+  }
 
 // Inicializar Socket.io
 let socket;
@@ -53,7 +53,7 @@ if (usuario.rol !== 'empleado') {
       const newBtnElim = btnEliminarTarea.cloneNode(true);
       btnEliminarTarea.parentNode.replaceChild(newBtnElim, btnEliminarTarea);
       
-      newBtnElim.addEventListener('click', async () => {
+      newBtnElim.onclick = async () => {
         if (!await window.appConfirm('¿Estás seguro de que deseas eliminar esta tarea? Esto liberará las bobinas asignadas y no se puede deshacer.')) return;
         newBtnElim.textContent = 'Eliminando...';
         newBtnElim.disabled = true;
@@ -71,7 +71,7 @@ if (usuario.rol !== 'empleado') {
           newBtnElim.disabled = false;
           window.isDeletingTask = false;
         }
-      });
+      }
 
     }
   }
@@ -150,9 +150,72 @@ async function cargarTarea() {
       } else if (tarea.estado === 'enviada') {
         if (esperandoMsg) esperandoMsg.classList.remove('hidden');
       } else {
-        formSection.classList.remove('hidden');
+        // Para tareas creadas por el empleado (trabajo libre con bobinas), mostrar botón de Finalizar
+        if (tarea.creadoPorEmpleado && tarea.estado === 'en_progreso') {
+          // Mostrar botón de Finalizar Trabajo en lugar del formón normal
+          let finalizarSection = document.getElementById('section-employee-finalize');
+          if (!finalizarSection) {
+            finalizarSection = document.createElement('div');
+            finalizarSection.id = 'section-employee-finalize';
+            finalizarSection.style.cssText = 'padding:16px;background:#f0fdf4;border-radius:8px;margin-bottom:16px;border:1px solid #bbf7d0;';
+            formSection.parentNode.insertBefore(finalizarSection, formSection);
+          }
+          // Construir selección de bobinas (qué hacemos con cada una)
+          const bobinas = tarea.bobinas || [];
+          let bobinaHTML = '';
+          if (bobinas.length > 0) {
+            bobinaHTML = `<div style="margin-bottom:12px;"><strong style="font-size:13px;">¿Qué hago con las bobinas sobrantes?</strong>`;
+            bobinas.forEach(b => {
+              const nombre = b.nombre || b._id;
+              bobinaHTML += `
+                <div style="display:flex;align-items:center;gap:10px;margin-top:8px;font-size:13px;">
+                  <span style="flex:1;">🔌 ${nombre} (${b.metrosRestantes}m restantes)</span>
+                  <select data-bobina-id="${b._id}" style="padding:5px;border:1px solid #cbd5e1;border-radius:5px;">
+                    <option value="regresar">↩️ Regresar al Almacén</option>
+                    <option value="desecho">🗑️ Marcar como Desecho</option>
+                  </select>
+                </div>`;
+            });
+            bobinaHTML += `</div>`;
+          }
+          finalizarSection.innerHTML = `
+            <h3 style="margin:0 0 10px;font-size:1rem;color:#065f46;">✅ Finalizar Trabajo</h3>
+            ${bobinaHTML}
+            <textarea id="emp-fin-comentario" rows="3" placeholder="Comentario final (opcional)" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:5px;font-size:13px;box-sizing:border-box;margin-bottom:10px;"></textarea>
+            <button id="btn-finalizar-trabajo-emp" class="btn-primary" style="width:100%;background:#10b981;">Marcar como Terminado y Enviar a Revisión</button>
+            <div id="emp-fin-error" style="color:red;font-size:12px;margin-top:6px;"></div>
+          `;
+          document.getElementById('btn-finalizar-trabajo-emp').onclick = async () => {
+            const comentarioCierre = document.getElementById('emp-fin-comentario').value.trim();
+            const decisiones = {};
+            document.querySelectorAll('[data-bobina-id]').forEach(sel => {
+              decisiones[sel.dataset.bobinaId] = sel.value;
+            });
+            const btn = document.getElementById('btn-finalizar-trabajo-emp');
+            btn.disabled = true; btn.textContent = 'Finalizando...';
+            try {
+              await apiFetch(`/tasks/${taskId}/employee-finalize`, {
+                method: 'POST',
+                body: JSON.stringify({ decisiones, comentarioCierre })
+              });
+              if (window.showToast) showToast('✅ Trabajo enviado a revisión del administrador.', 'success');
+              else alert('✅ Trabajo enviado a revisión.');
+              cargarTarea();
+            } catch(e) {
+              document.getElementById('emp-fin-error').textContent = '❌ ' + e.message;
+              btn.disabled = false; btn.textContent = 'Marcar como Terminado y Enviar a Revisión';
+            }
+          }
+          finalizarSection.classList.remove('hidden');
+        } else {
+          formSection.classList.remove('hidden');
+          // Ocultar sección de finalizar si existe
+          const ef = document.getElementById('section-employee-finalize');
+          if (ef) ef.classList.add('hidden');
+        }
         if (tarea.estado === 'requiere_evidencia') {
           reqEvidenciaMsg.classList.remove('hidden');
+          formSection.classList.remove('hidden');
         }
       }
     }
@@ -224,16 +287,33 @@ async function cargarTarea() {
     // Ocultar opciones de admin (entregable, aprobar, rechazar) si la tarea ya está cerrada
     const eFormSec = document.getElementById('entregable-form-section');
     const statusSec = document.getElementById('status-section');
+    
     if (tarea.estado === 'revisada') {
       if (eFormSec) eFormSec.classList.add('hidden');
       if (statusSec) statusSec.classList.add('hidden');
     } else {
-      // Solo mostrar status-section y entregable-form-section si es admin
+      // Mostrar entregable-form-section a todos (admin y empleado) si la tarea está abierta
+      if (eFormSec) {
+        eFormSec.classList.remove('hidden');
+        
+        const genMsg = document.getElementById('entregable-generado-msg');
+        const toggleBtn = document.getElementById('toggle-entregable');
+        const contentDiv = document.getElementById('entregable-content');
+
+        if (tarea.entregableGenerado) {
+          if (genMsg) genMsg.classList.remove('hidden');
+          if (toggleBtn) toggleBtn.classList.add('hidden');
+          if (contentDiv) contentDiv.classList.add('hidden');
+        } else {
+          if (genMsg) genMsg.classList.add('hidden');
+          if (toggleBtn) toggleBtn.classList.remove('hidden');
+        }
+      }
+      
+      // Solo mostrar status-section si es admin
       if (usuario.rol !== 'empleado') {
-        if (eFormSec) eFormSec.classList.remove('hidden');
         if (statusSec) statusSec.classList.remove('hidden');
       } else {
-        if (eFormSec) eFormSec.classList.add('hidden');
         if (statusSec) statusSec.classList.add('hidden');
       }
     }
@@ -323,7 +403,42 @@ async function cargarHistorico() {
 // Empleado: enviar reporte de avance
 const reportForm = document.getElementById('report-form');
 if (reportForm) {
-  reportForm.addEventListener('submit', async (e) => {
+  let reportFotosFiles = [];
+
+  function renderReportFotosPreviews() {
+    const preview = document.getElementById('fotos-preview');
+    if (!preview) return;
+    preview.innerHTML = '';
+    reportFotosFiles.forEach((file, i) => {
+      const url = URL.createObjectURL(file);
+      const div = document.createElement('div');
+      div.style.cssText = 'position:relative; width:72px; height:72px;';
+      div.innerHTML = `<img src="${url}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid #cbd5e1;">
+        <button type="button" style="position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;" data-idx="${i}">✕</button>`;
+      div.querySelector('button').onclick = () => {
+        URL.revokeObjectURL(url);
+        reportFotosFiles.splice(i, 1);
+        document.getElementById('fotos-count').textContent = `${reportFotosFiles.length} archivo(s)`;
+        renderReportFotosPreviews();
+      }
+      preview.appendChild(div);
+    });
+  }
+
+  const fotosInput = document.getElementById('fotos');
+  if (fotosInput) {
+    fotosInput.onchange = (ev) => {
+      const incoming = [...ev.target.files];
+      const available = Math.max(0, 15 - reportFotosFiles.length);
+      reportFotosFiles.push(...incoming.slice(0, available));
+      if (incoming.length > available) alert('Solo se permiten hasta 15 archivos en total.');
+      document.getElementById('fotos-count').textContent = `${reportFotosFiles.length} archivo(s)`;
+      renderReportFotosPreviews();
+      ev.target.value = '';
+    }
+  }
+
+  reportForm.onsubmit = async (e) => {
     e.preventDefault();
     const btn = reportForm.querySelector('button[type="submit"]');
     const originalText = btn.textContent;
@@ -331,8 +446,7 @@ if (reportForm) {
     btn.disabled = true;
 
     const comentario = document.getElementById('comentario').value.trim();
-    const fotosInput = document.getElementById('fotos');
-    const fotos = fotosInput.files.length ? await filesToBase64(fotosInput.files) : [];
+    const fotos = reportFotosFiles.length ? await filesToBase64(reportFotosFiles) : [];
 
     try {
       await apiFetch(`/tasks/${taskId}/reports`, {
@@ -340,6 +454,9 @@ if (reportForm) {
         body: JSON.stringify({ comentario, fotos }),
       });
       reportForm.reset();
+      reportFotosFiles = [];
+      document.getElementById('fotos-count').textContent = `0 archivo(s)`;
+      renderReportFotosPreviews();
       
       // Mostrar feedback visual
       btn.textContent = '¡Reporte Enviado!';
@@ -357,7 +474,7 @@ if (reportForm) {
       btn.textContent = originalText;
       btn.disabled = false;
     }
-  });
+  }
 }
 
 async function cargarBobinasDisponibles() {
@@ -376,7 +493,7 @@ async function cargarBobinasDisponibles() {
 // Admin/dom: cambiar estado usando los nuevos botones
 const botonesEstado = document.querySelectorAll('.btn-estado');
 botonesEstado.forEach(btn => {
-  btn.addEventListener('click', async (e) => {
+  btn.onclick = async (e) => {
     const estado = e.target.getAttribute('data-estado');
     
     // Si es "revisada", verificar inventario sobrante primero
@@ -395,7 +512,7 @@ botonesEstado.forEach(btn => {
     }
 
     ejecutarCambioEstado(estado, e.target);
-  });
+  }
 });
 
 async function ejecutarCambioEstado(estado, btnElement) {
@@ -482,10 +599,10 @@ const tiradasContent = document.getElementById('tiradas-content');
 const tiradasIcon = document.getElementById('tiradas-icon');
 
 if (toggleTiradas) {
-  toggleTiradas.addEventListener('click', () => {
+  toggleTiradas.onclick = () => {
     tiradasContent.classList.toggle('hidden');
     tiradasIcon.textContent = tiradasContent.classList.contains('hidden') ? '▼' : '▲';
-  });
+  }
 }
 
 // --- Acordeón para Entregable ---
@@ -494,17 +611,17 @@ const entregableContent = document.getElementById('entregable-content');
 const entregableIcon = document.getElementById('entregable-icon');
 
 if (toggleEntregable) {
-  toggleEntregable.addEventListener('click', () => {
+  toggleEntregable.onclick = () => {
     entregableContent.classList.toggle('hidden');
     entregableIcon.textContent = entregableContent.classList.contains('hidden') ? '▼' : '▲';
-  });
+  }
 }
 
 // --- Toggle Custom Bobina Input ---
 const bobinaMetrosSelect = document.getElementById('bobina-metros');
 const bobinaMetrosCustom = document.getElementById('bobina-metros-custom');
 if (bobinaMetrosSelect && bobinaMetrosCustom) {
-  bobinaMetrosSelect.addEventListener('change', (e) => {
+  bobinaMetrosSelect.onchange = (e) => {
     if (e.target.value === 'custom') {
       bobinaMetrosCustom.style.display = 'inline-block';
       bobinaMetrosCustom.required = true;
@@ -512,13 +629,13 @@ if (bobinaMetrosSelect && bobinaMetrosCustom) {
       bobinaMetrosCustom.style.display = 'none';
       bobinaMetrosCustom.required = false;
     }
-  });
+  }
 }
 
 // --- Agregar Bobina (Admin / Empleado) ---
 const addBobinaForm = document.getElementById('add-bobina-form');
 if (addBobinaForm) {
-  addBobinaForm.addEventListener('submit', async (e) => {
+  addBobinaForm.onsubmit = async (e) => {
     e.preventDefault();
     const btn = addBobinaForm.querySelector('button');
     const originalText = btn.textContent;
@@ -541,13 +658,13 @@ if (addBobinaForm) {
       btn.textContent = originalText;
       btn.disabled = false;
     }
-  });
+  }
 }
 
 // --- Agregar Tirada (Admin / Empleado) ---
 const addTiradaForm = document.getElementById('add-tirada-form');
 if (addTiradaForm) {
-  addTiradaForm.addEventListener('submit', async (e) => {
+  addTiradaForm.onsubmit = async (e) => {
     e.preventDefault();
     
     // Obtener los valores a agregar
@@ -592,7 +709,7 @@ if (addTiradaForm) {
       btn.textContent = originalText;
       btn.disabled = false;
     }
-  });
+  }
 }
 
 // --- Simulador Local para Empleado ---
@@ -600,7 +717,7 @@ const btnSimularTask = document.getElementById('btn-simular-cables-task');
 const simuladorResTask = document.getElementById('simulador-resultados-task');
 
 if (btnSimularTask && simuladorResTask) {
-  btnSimularTask.addEventListener('click', async () => {
+  btnSimularTask.onclick = async () => {
     btnSimularTask.textContent = 'Calculando...';
     try {
       const tarea = await apiFetch(`/tasks/${taskId}`);
@@ -630,7 +747,7 @@ if (btnSimularTask && simuladorResTask) {
     } finally {
       btnSimularTask.textContent = '⚡ Simular Asignación Actual';
     }
-  });
+  }
 }
 
 // --- Renderizar y Editar Tiradas ---
@@ -711,7 +828,7 @@ function renderTiradas(tiradas) {
   if (usuario.rol === 'empleado') {
     // Escuchar cambios en los inputs de metros
     document.querySelectorAll('.metros-input').forEach(input => {
-      input.addEventListener('change', async (e) => {
+      input.onchange = async (e) => {
         const tiradaId = e.target.getAttribute('data-id');
         const metrosReales = Number(e.target.value);
         try {
@@ -720,12 +837,12 @@ function renderTiradas(tiradas) {
             body: JSON.stringify({ metrosReales }),
           });
         } catch (err) { alert(err.message); }
-      });
+      }
     });
 
     // Escuchar cambios en el checkbox
     document.querySelectorAll('.cortado-checkbox').forEach(checkbox => {
-      checkbox.addEventListener('change', async (e) => {
+      checkbox.onchange = async (e) => {
         const tiradaId = e.target.getAttribute('data-id');
         const cortado = e.target.checked;
         const card = e.target.closest('.tirada-card');
@@ -748,7 +865,7 @@ function renderTiradas(tiradas) {
           alert(err.message); 
           e.target.checked = !cortado; // revertir
         }
-      });
+      }
     });
   }
 }
@@ -799,18 +916,18 @@ window.abrirVisorImagen = function(src) {
   modalVisor.classList.remove('hidden');
 };
 
-closeBtn.addEventListener('click', () => {
+closeBtn.onclick = () => {
   modalVisor.classList.add('hidden');
   modalImg.src = '';
-});
+}
 
 // Cerrar también si hace clic fuera de la imagen
-modalVisor.addEventListener('click', (e) => {
+modalVisor.onclick = (e) => {
   if (e.target === modalVisor) {
     modalVisor.classList.add('hidden');
     modalImg.src = '';
   }
-});
+}
 
   // =========================================================
   // MÓDULO ENTREGABLE FINAL — espejo de entregables.js
@@ -836,7 +953,7 @@ modalVisor.addEventListener('click', (e) => {
           y: (src.clientY - rect.top)  * (canvasEl.height / rect.height)
         };
       };
-      const begin = (ev) => { ev.preventDefault(); drawing = true; ctx.beginPath(); const p = getPos(ev); ctx.moveTo(p.x, p.y); canvasEl.dataset.touched = 'false'; };
+      const begin = (ev) => { ev.preventDefault(); drawing = true; ctx.beginPath(); const p = getPos(ev); ctx.moveTo(p.x, p.y); };
       const draw  = (ev) => { if (!drawing) return; ev.preventDefault(); const p = getPos(ev); ctx.lineTo(p.x, p.y); ctx.stroke(); canvasEl.dataset.touched = 'true'; };
       const stop  = () => { drawing = false; };
       canvasEl.addEventListener('mousedown', begin); canvasEl.addEventListener('mousemove', draw); canvasEl.addEventListener('mouseup', stop); canvasEl.addEventListener('mouseleave', stop);
@@ -847,14 +964,14 @@ modalVisor.addEventListener('click', (e) => {
     const canvasTec = setupEntregableCanvas(document.getElementById('e-canvas-tecnico'));
     const canvasCli = setupEntregableCanvas(document.getElementById('e-canvas-cliente'));
 
-    document.getElementById('btn-limpiar-firma-tec').addEventListener('click', () => {
+    document.getElementById('btn-limpiar-firma-tec').onclick = () => {
       canvasTec.ctx.clearRect(0, 0, canvasTec.canvas.width, canvasTec.canvas.height);
       canvasTec.canvas.dataset.touched = 'false';
-    });
-    document.getElementById('btn-limpiar-firma-cli').addEventListener('click', () => {
+    }
+    document.getElementById('btn-limpiar-firma-cli').onclick = () => {
       canvasCli.ctx.clearRect(0, 0, canvasCli.canvas.width, canvasCli.canvas.height);
       canvasCli.canvas.dataset.touched = 'false';
-    });
+    }
 
     // --- Cargar clientes (sites) ---
     async function cargarSitesParaEntregable() {
@@ -901,17 +1018,17 @@ modalVisor.addEventListener('click', (e) => {
         div.style.cssText = 'position:relative; width:72px; height:72px;';
         div.innerHTML = `<img src="${url}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid #cbd5e1;">
           <button type="button" style="position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;" data-idx="${i}">✕</button>`;
-        div.querySelector('button').addEventListener('click', () => {
+        div.querySelector('button').onclick = () => {
           URL.revokeObjectURL(url);
           evidenceFiles.splice(i, 1);
           document.getElementById('e-fotos-count').textContent = `${evidenceFiles.length} foto(s)`;
           renderEvidencePreviews();
-        });
+        }
         preview.appendChild(div);
       });
     }
 
-    document.getElementById('e-fotos').addEventListener('change', async (ev) => {
+    document.getElementById('e-fotos').onchange = async (ev) => {
       const incoming = [...ev.target.files];
       const available = Math.max(0, 15 - evidenceFiles.length);
       evidenceFiles.push(...incoming.slice(0, available));
@@ -919,10 +1036,10 @@ modalVisor.addEventListener('click', (e) => {
       document.getElementById('e-fotos-count').textContent = `${evidenceFiles.length} foto(s)`;
       renderEvidencePreviews();
       ev.target.value = '';
-    });
+    }
 
     // --- Submit ---
-    entregableForm.addEventListener('submit', async (ev) => {
+    entregableForm.onsubmit = async (ev) => {
       ev.preventDefault();
 
       const siteId       = document.getElementById('e-site-id').value;
@@ -971,6 +1088,10 @@ modalVisor.addEventListener('click', (e) => {
           try { msg = (await res.json()).error || msg; } catch { /* */ }
           throw new Error(msg);
         }
+        
+        // Marcar en nuestro backend que ya se hizo
+        await apiFetch(`/tasks/${taskId}/entregable`, { method: 'PATCH' });
+
         alert('✅ Entregable generado y enviado correctamente.');
         entregableForm.reset();
         evidenceFiles = [];
@@ -980,12 +1101,16 @@ modalVisor.addEventListener('click', (e) => {
         canvasCli.ctx.clearRect(0, 0, canvasCli.canvas.width, canvasCli.canvas.height);
         // Volver a rellenar nombre técnico
         if (inputTec && usuario) inputTec.value = `${usuario.nombre || ''} ${usuario.apellido || ''}`.trim();
+        
+        // Recargar tarea para que desaparezca el formulario
+        if (!socket) cargarTarea();
+
       } catch (err) {
         alert('❌ ' + err.message);
       } finally {
         btn.disabled = false;
         btn.innerHTML = originalLabel;
       }
-    });
+    }
   }
 };

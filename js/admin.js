@@ -18,7 +18,7 @@ window.initAdmin = function() {
 
 // --- Navegacion entre vistas ---
 document.querySelectorAll('.sidebar nav a').forEach((link) => {
-  link.addEventListener('click', (e) => {
+  link.onclick = (e) => {
     e.preventDefault();
     document.querySelectorAll('.sidebar nav a').forEach((a) => a.classList.remove('active'));
     document.querySelectorAll('.admin-content section').forEach((s) => s.classList.add('hidden'));
@@ -27,7 +27,7 @@ document.querySelectorAll('.sidebar nav a').forEach((link) => {
     if (link.dataset.view === 'usuarios') cargarUsuarios();
     if (link.dataset.view === 'inventario') cargarInventario();
     if (link.dataset.view === 'historial') cargarHistorial();
-  });
+  }
 });
 
 const ESTADO_LABEL = { 
@@ -110,9 +110,9 @@ async function cargarTareas() {
         <div class="meta">Asignado a: ${tarea.asignadoA?.nombre || '—'}</div>
         <div class="meta" style="margin-top:8px;"><span class="badge">${ESTADO_LABEL[tarea.estado]}</span></div>
       `;
-      card.addEventListener('click', () => {
+      card.onclick = () => {
         showView('view-task', tarea._id);
-      });
+      }
       grid.appendChild(card);
     });
   } catch (err) {
@@ -140,10 +140,22 @@ async function cargarHistorial() {
       item.className = 'report-entry';
       item.style.cursor = 'pointer';
       const fechaStr = tarea.completedAt ? new Date(tarea.completedAt).toLocaleString() : 'Fecha desconocida';
-      item.innerHTML = `<strong>${tarea.titulo}</strong> — Cerrada el: ${fechaStr}`;
-      item.addEventListener('click', () => {
+      const badgeEmpleado = tarea.creadoPorEmpleado ? `<span style="font-size:10px;background:#6366f1;color:white;border-radius:4px;padding:2px 6px;margin-left:8px;">Creado por Empleado</span>` : '';
+      const folioStr = tarea.cotizacionFolio ? `<span style="font-size:11px;background:#d1fae5;color:#065f46;border-radius:4px;padding:2px 6px;margin-left:8px;">Folio: ${tarea.cotizacionFolio}</span>` : '';
+      item.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+          <div>
+            <strong>${tarea.titulo}</strong>${badgeEmpleado}${folioStr}
+            <div style="font-size:12px;color:#64748b;margin-top:2px;">Cerrada el: ${fechaStr}</div>
+          </div>
+          <button class="btn-secondary" style="font-size:11px;padding:4px 10px;white-space:nowrap;" data-taskid="${tarea._id}" onclick="event.stopPropagation(); asignarFolioHistorial('${tarea._id}')">
+            📎 Asignar Folio
+          </button>
+        </div>
+      `;
+      item.onclick = () => {
         showView('view-task', tarea._id);
-      });
+      }
       list.appendChild(item);
     });
   } catch (err) {
@@ -183,7 +195,42 @@ if (taskForm) {
     }
   }
 
-  taskForm.addEventListener('submit', async (e) => {
+  let fotosReferenciaFiles = [];
+
+  function renderFotosReferenciaPreviews() {
+    const preview = document.getElementById('fotosReferencia-preview');
+    if (!preview) return;
+    preview.innerHTML = '';
+    fotosReferenciaFiles.forEach((file, i) => {
+      const url = URL.createObjectURL(file);
+      const div = document.createElement('div');
+      div.style.cssText = 'position:relative; width:72px; height:72px;';
+      div.innerHTML = `<img src="${url}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid #cbd5e1;">
+        <button type="button" style="position:absolute;top:2px;right:2px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;" data-idx="${i}">✕</button>`;
+      div.querySelector('button').onclick = () => {
+        URL.revokeObjectURL(url);
+        fotosReferenciaFiles.splice(i, 1);
+        document.getElementById('fotosReferencia-count').textContent = `${fotosReferenciaFiles.length} archivo(s)`;
+        renderFotosReferenciaPreviews();
+      }
+      preview.appendChild(div);
+    });
+  }
+
+  const fotosReferenciaInput = document.getElementById('fotosReferencia');
+  if (fotosReferenciaInput) {
+    fotosReferenciaInput.onchange = (ev) => {
+      const incoming = [...ev.target.files];
+      const available = Math.max(0, 15 - fotosReferenciaFiles.length);
+      fotosReferenciaFiles.push(...incoming.slice(0, available));
+      if (incoming.length > available) alert('Solo se permiten hasta 15 archivos en total.');
+      document.getElementById('fotosReferencia-count').textContent = `${fotosReferenciaFiles.length} archivo(s)`;
+      renderFotosReferenciaPreviews();
+      ev.target.value = '';
+    }
+  }
+
+  taskForm.onsubmit = async (e) => {
     e.preventDefault();
     const submitBtn = taskForm.querySelector('button[type="submit"]');
     const originalText = submitBtn ? submitBtn.textContent : 'Crear Tarea';
@@ -193,8 +240,7 @@ if (taskForm) {
     }
 
     try {
-      const fotosInput = document.getElementById('fotosReferencia');
-      const fotosReferencia = fotosInput.files.length ? await filesToBase64(fotosInput.files) : [];
+      const fotosReferencia = fotosReferenciaFiles.length ? await filesToBase64(fotosReferenciaFiles) : [];
 
       // Recolectar bobinas dinámicas (IDs de inventario)
       const bobinaIds = [];
@@ -245,6 +291,10 @@ if (taskForm) {
 
       await apiFetch('/admin/tasks', { method: 'POST', body: JSON.stringify(body) });
       taskForm.reset();
+      fotosReferenciaFiles = [];
+      document.getElementById('fotosReferencia-count').textContent = `0 archivo(s)`;
+      renderFotosReferenciaPreviews();
+      
       alert('Tarea creada correctamente');
       cargarTareas();
     } catch (err) {
@@ -255,14 +305,14 @@ if (taskForm) {
         submitBtn.textContent = originalText;
       }
     }
-  });
+  }
 
   // Logica para agregar filas de tiradas dinámicamente
   const btnAddTiradaRow = document.getElementById('btn-add-tirada-row');
   const createTiradasList = document.getElementById('create-tiradas-list');
   
   if (btnAddTiradaRow && createTiradasList) {
-    btnAddTiradaRow.addEventListener('click', () => {
+    btnAddTiradaRow.onclick = () => {
       const row = document.createElement('div');
       row.className = 'tirada-row';
       row.style = 'display: grid; grid-template-columns: 2fr 2fr 1fr 40px; gap: 10px; align-items: center; margin-bottom: 5px;';
@@ -278,7 +328,7 @@ if (taskForm) {
         <button type="button" class="btn-danger" onclick="this.parentElement.remove()" style="padding: 8px;">X</button>
       `;
       createTiradasList.appendChild(row);
-    });
+    }
   }
 
   // Logica para agregar filas de bobinas dinámicamente
@@ -286,7 +336,7 @@ if (taskForm) {
   const createBobinasList = document.getElementById('create-bobinas-list');
   
   if (btnAddBobinaRow && createBobinasList) {
-    btnAddBobinaRow.addEventListener('click', async () => {
+    btnAddBobinaRow.onclick = async () => {
       // Fetch available inventory
       const bobinasDisponibles = await apiFetch('/inventory?estado=disponible');
       if (bobinasDisponibles.length === 0) {
@@ -310,7 +360,7 @@ if (taskForm) {
         <button type="button" class="btn-danger" onclick="this.parentElement.remove()" style="padding: 8px;">X</button>
       `;
       createBobinasList.appendChild(row);
-    });
+    }
   }
 
   // Lógica del simulador
@@ -318,7 +368,7 @@ if (taskForm) {
   const simuladorResultados = document.getElementById('simulador-resultados');
   
   if (btnSimular && simuladorResultados) {
-    btnSimular.addEventListener('click', () => {
+    btnSimular.onclick = () => {
       // 1. Leer estado actual
       const bobinas = [];
       document.querySelectorAll('.bobina-row').forEach(row => {
@@ -384,7 +434,7 @@ if (taskForm) {
 
       simuladorResultados.innerHTML = html;
       simuladorResultados.classList.remove('hidden');
-    });
+    }
   }
 }
 
@@ -419,7 +469,7 @@ async function cargarEmpleadosParaSelect() {
 // --- Crear usuario y listar usuarios (solo admin) ---
 const userForm = document.getElementById('user-form');
 if (userForm) {
-  userForm.addEventListener('submit', async (e) => {
+  userForm.onsubmit = async (e) => {
     e.preventDefault();
     const btn = userForm.querySelector('button[type="submit"]');
     const originalText = btn.textContent;
@@ -444,7 +494,7 @@ if (userForm) {
       btn.textContent = originalText;
       btn.disabled = false;
     }
-  });
+  }
 }
 
 window.eliminarUsuario = async function(id) {
@@ -508,7 +558,7 @@ async function cargarUsuarios() {
 
 const asignarForm = document.getElementById('asignar-bobina-empleado-form');
 if (asignarForm) {
-  asignarForm.addEventListener('submit', async (e) => {
+  asignarForm.onsubmit = async (e) => {
     e.preventDefault();
     const bobinaId = document.getElementById('asignar-bobina-id').value;
     const empleadoId = document.getElementById('asignar-empleado-id').value;
@@ -537,12 +587,12 @@ if (asignarForm) {
         submitBtn.textContent = originalText;
       }
     }
-  });
+  }
 }
 
 const bobinaForm = document.getElementById('bobina-form');
 if (bobinaForm) {
-  bobinaForm.addEventListener('submit', async (e) => {
+  bobinaForm.onsubmit = async (e) => {
     e.preventDefault();
     const btn = bobinaForm.querySelector('button[type="submit"]');
     const originalText = btn.textContent;
@@ -563,7 +613,7 @@ if (bobinaForm) {
       btn.textContent = originalText;
       btn.disabled = false;
     }
-  });
+  }
 }
 
 window.eliminarBobina = async function(id) {
@@ -608,7 +658,10 @@ async function cargarInventario() {
         const statusColor = b.estado === 'disponible' ? 'var(--success)' : 
                             b.estado === 'asignada' ? 'var(--warning)' : 
                             'var(--danger)';
-        const taskAsignada = b.tareaActual ? `(Asignada a: ${b.tareaActual.titulo})` : '';
+        const taskAsignada = b.tareaActual ? `(Tarea: ${b.tareaActual.titulo})` : '';
+        const empleadoNombre = b.empleadoAsignado ? (b.empleadoAsignado.nombre || '') : '';
+        const empleadoBadge = (b.estado === 'asignada' && !b.tareaActual && empleadoNombre) 
+          ? `<span style="font-size:11px;color:#d97706;"> — Empleado: <strong>${empleadoNombre}</strong></span>` : '';
         
         let botonesStr = '';
         if (b.estado === 'disponible') {
@@ -618,6 +671,12 @@ async function cargarInventario() {
               <button class="btn-danger" style="font-size: 11px; padding: 4px 8px; margin-left: 5px;" onclick="eliminarBobina('${b._id}')">Borrar</button>
             </div>
           `;
+        } else if (b.estado === 'asignada' && !b.tareaActual) {
+          botonesStr = `
+            <div>
+              <button class="btn-secondary" style="font-size: 11px; padding: 4px 8px; border-color:#ef4444;color:#ef4444;" onclick="desasignarBobina('${b._id}')">✕ Cancelar Asignación</button>
+            </div>
+          `;
         }
 
         return `
@@ -625,7 +684,7 @@ async function cargarInventario() {
             <div>
               <strong>${b.nombre}</strong> — ${b.metrosRestantes}m restantes (de ${b.metrosIniciales}m)
               <br><span style="font-size: 11px; color: ${statusColor}; font-weight: bold;">[${b.estado.toUpperCase()}]</span> 
-              <span style="font-size: 11px; color: var(--text-muted);">${taskAsignada}</span>
+              <span style="font-size: 11px; color: var(--text-muted);">${taskAsignada}</span>${empleadoBadge}
             </div>
             ${botonesStr}
           </div>
@@ -636,6 +695,40 @@ async function cargarInventario() {
     alert(err.message);
   }
 }
+
+
+async function desasignarBobina(bobinaId) {
+  if (!await window.appConfirm('¿Cancelar la asignación de esta bobina? Regresará al almacén como disponible.')) return;
+  try {
+    await apiFetch(`/admin/bobina-desasignar/${bobinaId}`, { method: 'POST' });
+    showToast('Bobina devuelta al almécen correctamente.', 'success');
+    cargarInventario();
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+window.desasignarBobina = desasignarBobina;
+
+async function asignarFolioHistorial(taskId) {
+  const folio = await window.appPrompt('Escribe el Folio de Cotización a asignar a este trabajo:');
+  if (!folio) return;
+  try {
+    await apiFetch(`/admin/tasks/${taskId}/folio`, {
+      method: 'PATCH',
+      body: JSON.stringify({ cotizacionFolio: folio })
+    });
+    showToast(`Folio "${folio}" asignado correctamente.`, 'success');
+    cargarHistorial();
+  } catch (err) {
+    alert('Error: ' + err.message);
+  }
+}
+
+window.asignarFolioHistorial = asignarFolioHistorial;
+
+  // Exponer función de refresco para cuando se regresa a esta vista sin re-inicializar
+  window._adminRefresh = () => cargarTareas();
 
   cargarTareas();
 };
