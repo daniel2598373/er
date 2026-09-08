@@ -478,8 +478,8 @@ if (userForm) {
 
     const body = {
       nombre: document.getElementById('nombre').value.trim(),
-      username: document.getElementById('username').value.trim(),
-      password: document.getElementById('password').value,
+      username: document.getElementById('new_username').value.trim(),
+      password: document.getElementById('new_password').value,
       rol: document.getElementById('rol').value,
     };
     try {
