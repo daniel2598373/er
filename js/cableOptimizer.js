@@ -11,15 +11,17 @@ function optimizarCortes(bobinas, tiradas) {
   const bobinasLocales = bobinas.map(b => ({
     nombre: b.nombre,
     metrosIniciales: b.metrosIniciales,
-    metrosRestantes: b.metrosIniciales
+    metrosRestantes: b.metrosIniciales,
+    categoria: b.categoria,
+    bobinaId: b.bobinaId || b._id
   }));
 
   const tiradasLocales = tiradas.map(t => ({
     ...t.toObject ? t.toObject() : t,
-    bobinaAsignada: null // Reset para simulación
+    // NO hacemos reset aquí en el backend, porque queremos conservar las bobinasAsignadas de las tiradas ya cortadas
   }));
 
-  // Separar cortadas de pendientes (En simulación nueva, todas son pendientes)
+  // Separar cortadas de pendientes
   const cortadas = tiradasLocales.filter(t => t.cortado);
   const pendientes = tiradasLocales.filter(t => !t.cortado);
 
@@ -46,7 +48,8 @@ function optimizarCortes(bobinas, tiradas) {
 
     // Buscar el mejor ajuste (Best Fit)
     bobinasLocales.forEach(bobina => {
-      if (bobina.metrosRestantes >= tirada.metrosEstimados) {
+      // Verificar que el tipo de cable de la bobina coincida con el requerido por la tirada
+      if (bobina.categoria === tirada.cableRequerido && bobina.metrosRestantes >= tirada.metrosEstimados) {
         const sobra = bobina.metrosRestantes - tirada.metrosEstimados;
         if (sobra < menorSobra) {
           menorSobra = sobra;
@@ -57,6 +60,7 @@ function optimizarCortes(bobinas, tiradas) {
 
     if (mejorBobina) {
       tirada.bobinaAsignada = mejorBobina.nombre;
+      tirada.bobinaId = mejorBobina.bobinaId;
       mejorBobina.metrosRestantes -= tirada.metrosEstimados;
     } else {
       tirada.bobinaAsignada = "Sin cable suficiente";

@@ -179,10 +179,11 @@
               <button type="button" class="btn-secondary" id="btn-add-tirada-row" style="font-size: 13px; padding: 8px 12px;">+ Agregar línea de cable</button>
             </div>
 
-            <div style="margin-bottom: 20px;">
-              <button type="button" class="btn-secondary" id="btn-simular-cables" style="width: 100%; border-color: var(--accent-primary); color: var(--accent-primary);">⚡ Simular Asignación de Cable</button>
-              <div id="simulador-resultados" class="hidden" style="margin-top: 15px; padding: 15px; border-radius: var(--radius-sm); font-size: 14px;"></div>
+            <div style="margin-bottom: 20px; display: flex; gap: 10px;">
+              <button type="button" class="btn-primary" id="btn-auto-simular" style="flex: 2; padding: 10px; font-weight: bold; background: var(--accent-primary);">🤖 Auto-Asignar Bobinas</button>
+              <button type="button" class="btn-secondary" id="btn-simular-cables" style="flex: 1; border-color: var(--accent-primary); color: var(--accent-primary);">🔄 Recalcular Manual</button>
             </div>
+            <div id="simulador-resultados" class="hidden" style="margin-bottom: 20px; padding: 15px; border-radius: var(--radius-sm); font-size: 14px;"></div>
 
             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 20px; background: rgba(16, 185, 129, 0.1); padding: 10px; border-radius: var(--radius-sm);">
               <input type="checkbox" id="permitir-extras" style="width: auto; margin: 0; accent-color: #10b981;">

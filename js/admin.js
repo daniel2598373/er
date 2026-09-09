@@ -377,9 +377,90 @@ if (taskForm) {
     }
   }
 
-  // Lógica del simulador
+  // Lógica del simulador automático
+  const btnAutoSimular = document.getElementById('btn-auto-simular');
   const btnSimular = document.getElementById('btn-simular-cables');
   const simuladorResultados = document.getElementById('simulador-resultados');
+
+  if (btnAutoSimular && simuladorResultados) {
+    btnAutoSimular.onclick = async () => {
+      const tiradas = [];
+      document.querySelectorAll('.tirada-row').forEach(row => {
+        const nombre = row.querySelector('.t-nombre').value.trim();
+        const metrosEstimados = Number(row.querySelector('.t-metros').value);
+        const cableRequerido = row.querySelector('.t-cable').value;
+        if (nombre && metrosEstimados > 0) tiradas.push({ nombre, metrosEstimados, cableRequerido, cortado: false });
+      });
+
+      if (tiradas.length === 0) {
+        simuladorResultados.className = 'alert-box warning';
+        simuladorResultados.innerHTML = 'Agrega al menos una tirada antes de auto-asignar.';
+        simuladorResultados.classList.remove('hidden');
+        return;
+      }
+
+      btnAutoSimular.disabled = true;
+      btnAutoSimular.textContent = 'Calculando...';
+
+      try {
+        const bobinasDisponibles = await apiFetch('/inventory?estado=disponible');
+        if (bobinasDisponibles.length === 0) {
+           simuladorResultados.className = 'alert-box warning';
+           simuladorResultados.innerHTML = 'No hay bobinas disponibles en el inventario para auto-asignar.';
+           simuladorResultados.classList.remove('hidden');
+           return;
+        }
+
+        const bobinasParaSimular = bobinasDisponibles.map(b => ({
+          nombre: `[#${b.folio || 'N/A'}] ${b.nombre}`,
+          metrosIniciales: b.metrosRestantes,
+          categoria: b.categoria || 'otro',
+          bobinaId: b._id
+        }));
+
+        const result = optimizarCortes(bobinasParaSimular, tiradas);
+
+        // Limpiar bobinas actuales de la interfaz
+        const createBobinasList = document.getElementById('create-bobinas-list');
+        createBobinasList.innerHTML = '';
+
+        const bobinasUsadasIds = new Set(result.tiradas.map(t => t.bobinaId).filter(id => id));
+        
+        bobinasDisponibles.forEach(b => {
+          if (bobinasUsadasIds.has(b._id)) {
+            const row = document.createElement('div');
+            row.className = 'bobina-row';
+            row.style = 'display: grid; grid-template-columns: 3fr 40px; gap: 10px; align-items: center; margin-bottom: 5px;';
+            
+            let optionsHtml = '<option value="">Selecciona una bobina...</option>';
+            bobinasDisponibles.forEach(bOpt => {
+              const isSelected = bOpt._id === b._id ? 'selected' : '';
+              optionsHtml += `<option value="${bOpt._id}" data-nombre="${bOpt.nombre}" data-metros="${bOpt.metrosRestantes}" data-categoria="${bOpt.categoria || 'otro'}" ${isSelected}>[#${bOpt.folio || 'N/A'} - ${bOpt.categoria || 'otro'}] ${bOpt.nombre} (${bOpt.metrosRestantes}m)</option>`;
+            });
+
+            row.innerHTML = `
+              <select class="b-select" required style="width:100%; font-size: 13px;">
+                ${optionsHtml}
+              </select>
+              <button type="button" class="btn-danger" onclick="this.parentElement.remove()" style="padding: 8px;">X</button>
+            `;
+            createBobinasList.appendChild(row);
+          }
+        });
+
+        // Llamar la logica de simulación manual para renderizar los resultados verdes/rojos
+        if (btnSimular) btnSimular.click();
+        
+      } catch (err) {
+        alert(err.message);
+      } finally {
+        btnAutoSimular.disabled = false;
+        btnAutoSimular.textContent = '🤖 Auto-Asignar Bobinas';
+      }
+    };
+  }
+  
+  // Lógica del simulador manual
   
   if (btnSimular && simuladorResultados) {
     btnSimular.onclick = () => {
@@ -425,6 +506,13 @@ if (taskForm) {
         html += `<strong>✅ Cable Suficiente</strong><br>`;
         html += `Sobrarán en total: <strong>${stats.totalSobrante}m</strong> (de las bobinas abiertas).<br>`;
         
+        const bobinasAbiertas = result.bobinas.filter(b => b.metrosRestantes < b.metrosIniciales);
+        if (bobinasAbiertas.length > 0) {
+          html += `<div style="margin-top: 8px;"><strong>✂️ Sobrante por bobina abierta:</strong><br>`;
+          bobinasAbiertas.forEach(b => html += `- ${b.nombre}: quedarán <strong>${b.metrosRestantes}m</strong><br>`);
+          html += `</div>`;
+        }
+        
         if (stats.bobinasSinUsar.length > 0) {
           html += `<div style="margin-top: 8px;"><strong>📦 Cajas Intactas (puedes dejarlas en almacén):</strong><br>`;
           stats.bobinasSinUsar.forEach(b => html += `- ${b.nombre} (${b.metrosIniciales}m)<br>`);
@@ -462,7 +550,6 @@ async function cargarEmpleadosParaSelect() {
     if (select) select.innerHTML = '';
     if (selectAsignar) selectAsignar.innerHTML = '<option value="">Seleccionar Empleado...</option>';
     users
-      .filter((u) => u.rol === 'empleado' || u.rol === 'user' || u.rol === 'Clase C')
       .forEach((u) => {
         if (select) {
           const opt = document.createElement('option');
