@@ -259,9 +259,10 @@ if (taskForm) {
       document.querySelectorAll('.tirada-row').forEach(row => {
         const nombre = row.querySelector('.t-nombre').value.trim();
         const categoria = row.querySelector('.t-categoria').value;
+        const cableRequerido = row.querySelector('.t-cable').value;
         const metrosEstimados = Number(row.querySelector('.t-metros').value);
         if (nombre && metrosEstimados > 0) {
-          tiradas.push({ nombre, categoria, metrosEstimados });
+          tiradas.push({ nombre, categoria, cableRequerido, metrosEstimados });
         }
       });
 
@@ -315,7 +316,7 @@ if (taskForm) {
     btnAddTiradaRow.onclick = () => {
       const row = document.createElement('div');
       row.className = 'tirada-row';
-      row.style = 'display: grid; grid-template-columns: 2fr 2fr 1fr 40px; gap: 10px; align-items: center; margin-bottom: 5px;';
+      row.style = 'display: grid; grid-template-columns: 2fr 2fr 2fr 1fr 40px; gap: 10px; align-items: center; margin-bottom: 5px;';
       row.innerHTML = `
         <input type="text" class="t-nombre" placeholder="Nombre (ej. C-1)" required style="width:100%; font-size: 13px;">
         <select class="t-categoria" required style="width:100%; font-size: 13px;">
@@ -323,6 +324,19 @@ if (taskForm) {
           <option value="aps">APs</option>
           <option value="nodos">Nodos</option>
           <option value="control_acceso">Ctrl. Acceso</option>
+          <option value="enlace_fibr_mono">Enlace Fibra Mono</option>
+          <option value="enlace_fibr_multi">Enlace Fibra Multi</option>
+          <option value="audio">Audio Ambiental</option>
+        </select>
+        <select class="t-cable" required style="width:100%; font-size: 13px;">
+          <option value="utp_cat5e">UTP Cat 5e</option>
+          <option value="utp_cat6" selected>UTP Cat 6</option>
+          <option value="utp_cat6a">UTP Cat 6A</option>
+          <option value="fibra_monomodo">Fibra Monomodo</option>
+          <option value="fibra_multimodo">Fibra Multimodo</option>
+          <option value="control_acceso">Cable C. Acceso</option>
+          <option value="audio">Cable de Audio</option>
+          <option value="otro">Otro</option>
         </select>
         <input type="number" class="t-metros" placeholder="Metros" required style="width:100%; font-size: 13px;">
         <button type="button" class="btn-danger" onclick="this.parentElement.remove()" style="padding: 8px;">X</button>
@@ -350,7 +364,7 @@ if (taskForm) {
       
       let optionsHtml = '<option value="">Selecciona una bobina...</option>';
       bobinasDisponibles.forEach(b => {
-        optionsHtml += `<option value="${b._id}" data-nombre="${b.nombre}" data-metros="${b.metrosRestantes}">[${b.metrosRestantes}m] ${b.nombre}</option>`;
+        optionsHtml += `<option value="${b._id}" data-nombre="${b.nombre}" data-metros="${b.metrosRestantes}" data-categoria="${b.categoria || 'otro'}">[#${b.folio || 'N/A'} - ${b.categoria || 'otro'}] ${b.nombre} (${b.metrosRestantes}m)</option>`;
       });
 
       row.innerHTML = `
@@ -378,6 +392,7 @@ if (taskForm) {
           bobinas.push({ 
             nombre: selectedOpt.dataset.nombre, 
             metrosIniciales: Number(selectedOpt.dataset.metros),
+            categoria: selectedOpt.dataset.categoria,
             bobinaId: selectedOpt.value 
           });
         }
@@ -387,8 +402,9 @@ if (taskForm) {
       document.querySelectorAll('.tirada-row').forEach(row => {
         const nombre = row.querySelector('.t-nombre').value.trim();
         const metrosEstimados = Number(row.querySelector('.t-metros').value);
+        const cableRequerido = row.querySelector('.t-cable').value;
         // fake obj para el optimizador
-        if (nombre && metrosEstimados > 0) tiradas.push({ nombre, metrosEstimados, cortado: false });
+        if (nombre && metrosEstimados > 0) tiradas.push({ nombre, metrosEstimados, cableRequerido, cortado: false });
       });
 
       if (tiradas.length === 0) {
@@ -601,6 +617,7 @@ if (bobinaForm) {
 
     const body = {
       nombre: document.getElementById('bobina-nombre-inv').value.trim(),
+      categoria: document.getElementById('bobina-categoria-inv').value,
       metrosIniciales: Number(document.getElementById('bobina-metros-inv').value),
     };
     try {
@@ -626,23 +643,72 @@ window.eliminarBobina = async function(id) {
   }
 };
 
-window.editarBobina = async function(id, nombreActual, metrosActuales) {
-  const nuevoNombre = await window.appPrompt('Editar Nombre de la bobina:', nombreActual);
-  if (nuevoNombre === null) return;
-  
-  const nuevosMetros = await window.appPrompt('Editar Metros Iniciales:', metrosActuales);
-  if (nuevosMetros === null) return;
+window.editarBobina = async function(id, nombreActual, metrosActuales, categoriaActual) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);';
+    
+    const box = document.createElement('div');
+    box.style.cssText = 'background:white;padding:24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);max-width:400px;width:90%;font-family:sans-serif;color:black;';
+    
+    box.innerHTML = `
+      <h3 style="margin-top:0;margin-bottom:15px;text-align:center;">Editar Bobina</h3>
+      <label style="font-size:13px;color:#475569;margin-bottom:4px;display:block;">Nombre</label>
+      <input type="text" id="edit-bobina-nombre" value="${nombreActual}" style="width:100%;padding:10px;margin-bottom:15px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;box-sizing:border-box;">
+      
+      <label style="font-size:13px;color:#475569;margin-bottom:4px;display:block;">Categoría</label>
+      <select id="edit-bobina-categoria" style="width:100%;padding:10px;margin-bottom:15px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;box-sizing:border-box;">
+        <option value="utp_cat5e" ${categoriaActual === 'utp_cat5e' ? 'selected' : ''}>UTP Cat 5e</option>
+        <option value="utp_cat6" ${categoriaActual === 'utp_cat6' ? 'selected' : ''}>UTP Cat 6</option>
+        <option value="utp_cat6a" ${categoriaActual === 'utp_cat6a' ? 'selected' : ''}>UTP Cat 6A</option>
+        <option value="fibra_monomodo" ${categoriaActual === 'fibra_monomodo' ? 'selected' : ''}>Fibra Monomodo</option>
+        <option value="fibra_multimodo" ${categoriaActual === 'fibra_multimodo' ? 'selected' : ''}>Fibra Multimodo</option>
+        <option value="control_acceso" ${categoriaActual === 'control_acceso' ? 'selected' : ''}>Cable Control de Acceso</option>
+        <option value="audio" ${categoriaActual === 'audio' ? 'selected' : ''}>Cable de Audio</option>
+        <option value="otro" ${categoriaActual === 'otro' ? 'selected' : ''}>Otro</option>
+      </select>
 
-  const body = {};
-  if (nuevoNombre.trim() !== '') body.nombre = nuevoNombre.trim();
-  if (Number(nuevosMetros) > 0) body.metrosIniciales = Number(nuevosMetros);
+      <label style="font-size:13px;color:#475569;margin-bottom:4px;display:block;">Metros Iniciales</label>
+      <input type="number" id="edit-bobina-metros" value="${metrosActuales}" style="width:100%;padding:10px;margin-bottom:20px;border:1px solid #cbd5e1;border-radius:6px;font-size:14px;box-sizing:border-box;">
+      
+      <div style="display:flex;gap:10px;justify-content:center;">
+        <button id="btn-cancel-edit-bobina" style="padding:8px 16px;border:1px solid #cbd5e1;background:white;border-radius:6px;cursor:pointer;color:#475569;font-weight:bold;font-size:14px;flex:1;">Cancelar</button>
+        <button id="btn-save-edit-bobina" style="padding:8px 16px;border:none;background:#3b82f6;border-radius:6px;cursor:pointer;color:white;font-weight:bold;font-size:14px;flex:1;">Guardar</button>
+      </div>
+    `;
 
-  try {
-    await apiFetch(`/inventory/${id}`, { method: 'PUT', body: JSON.stringify(body) });
-    cargarInventario();
-  } catch (err) {
-    alert(err.message);
-  }
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    document.getElementById('btn-cancel-edit-bobina').onclick = () => {
+      overlay.remove();
+      resolve();
+    };
+
+    document.getElementById('btn-save-edit-bobina').onclick = async () => {
+      const nuevoNombre = document.getElementById('edit-bobina-nombre').value.trim();
+      const nuevaCategoria = document.getElementById('edit-bobina-categoria').value;
+      const nuevosMetros = Number(document.getElementById('edit-bobina-metros').value);
+
+      if (!nuevoNombre) return alert('El nombre es requerido.');
+      if (nuevosMetros <= 0) return alert('Los metros deben ser mayores a 0.');
+
+      const body = {
+        nombre: nuevoNombre,
+        categoria: nuevaCategoria,
+        metrosIniciales: nuevosMetros
+      };
+
+      try {
+        await apiFetch(`/inventory/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+        cargarInventario();
+        overlay.remove();
+        resolve();
+      } catch (err) {
+        alert(err.message);
+      }
+    };
+  });
 };
 
 async function cargarInventario() {
@@ -667,7 +733,7 @@ async function cargarInventario() {
         if (b.estado === 'disponible') {
           botonesStr = `
             <div>
-              <button class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="editarBobina('${b._id}', '${b.nombre}', ${b.metrosIniciales})">Editar</button>
+              <button class="btn-secondary" style="font-size: 11px; padding: 4px 8px;" onclick="editarBobina('${b._id}', '${b.nombre}', ${b.metrosIniciales}, '${b.categoria || 'otro'}')">Editar</button>
               <button class="btn-danger" style="font-size: 11px; padding: 4px 8px; margin-left: 5px;" onclick="eliminarBobina('${b._id}')">Borrar</button>
             </div>
           `;
@@ -682,9 +748,10 @@ async function cargarInventario() {
         return `
           <div class="report-entry" style="display: flex; justify-content: space-between; align-items: center;">
             <div>
-              <strong>${b.nombre}</strong> — ${b.metrosRestantes}m restantes (de ${b.metrosIniciales}m)
+              <strong>[#${b.folio || 'N/A'}] ${b.nombre}</strong> — ${b.metrosRestantes}m restantes (de ${b.metrosIniciales}m)
               <br><span style="font-size: 11px; color: ${statusColor}; font-weight: bold;">[${b.estado.toUpperCase()}]</span> 
-              <span style="font-size: 11px; color: var(--text-muted);">${taskAsignada}</span>${empleadoBadge}
+              <span style="font-size: 11px; color: #4f46e5; font-weight: bold; margin-left: 5px;">Cat: ${b.categoria || 'otro'}</span>
+              <span style="font-size: 11px; color: var(--text-muted); margin-left: 5px;">${taskAsignada}</span>${empleadoBadge}
             </div>
             ${botonesStr}
           </div>

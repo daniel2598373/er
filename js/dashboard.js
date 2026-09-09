@@ -152,8 +152,27 @@ window.initDashboard = function() {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;';
       row.innerHTML = `
-        <input type="text" placeholder="Nombre (Ej. Cámara 1)" data-field="nombre" style="flex:2;padding:7px;border:1px solid #cbd5e1;border-radius:5px;font-size:13px;">
-        <input type="number" placeholder="Metros" data-field="metros" min="1" style="width:80px;padding:7px;border:1px solid #cbd5e1;border-radius:5px;font-size:13px;">
+        <input type="text" placeholder="Nombre (Ej. Cámara 1)" data-field="nombre" style="flex:1;padding:7px;border:1px solid #cbd5e1;border-radius:5px;font-size:13px;">
+        <select data-field="categoria" required style="flex:1;padding:7px;border:1px solid #cbd5e1;border-radius:5px;font-size:13px;">
+          <option value="camaras">Cámaras</option>
+          <option value="aps">APs</option>
+          <option value="nodos">Nodos</option>
+          <option value="control_acceso">Ctrl. Acceso</option>
+          <option value="enlace_fibr_mono">Enlace Fibra Mono</option>
+          <option value="enlace_fibr_multi">Enlace Fibra Multi</option>
+          <option value="audio">Audio Ambiental</option>
+        </select>
+        <select data-field="cable" required style="flex:1;padding:7px;border:1px solid #cbd5e1;border-radius:5px;font-size:13px;">
+          <option value="utp_cat5e">UTP Cat 5e</option>
+          <option value="utp_cat6" selected>UTP Cat 6</option>
+          <option value="utp_cat6a">UTP Cat 6A</option>
+          <option value="fibra_monomodo">Fibra Monomodo</option>
+          <option value="fibra_multimodo">Fibra Multimodo</option>
+          <option value="control_acceso">Cable C. Acceso</option>
+          <option value="audio">Cable de Audio</option>
+          <option value="otro">Otro</option>
+        </select>
+        <input type="number" placeholder="Metros" data-field="metros" min="1" style="width:70px;padding:7px;border:1px solid #cbd5e1;border-radius:5px;font-size:13px;">
         <button type="button" style="background:#ef4444;color:white;border:none;border-radius:5px;padding:6px 10px;cursor:pointer;font-size:13px;" onclick="this.parentElement.remove()">✕</button>
       `;
       document.getElementById('qt-tiradas-list').appendChild(row);
@@ -168,8 +187,10 @@ window.initDashboard = function() {
       const tiradas = [];
       rows.forEach(row => {
         const nombre = row.querySelector('[data-field="nombre"]').value.trim();
+        const categoria = row.querySelector('[data-field="categoria"]').value;
+        const cableRequerido = row.querySelector('[data-field="cable"]').value;
         const metros = parseFloat(row.querySelector('[data-field="metros"]').value);
-        if (nombre && metros > 0) tiradas.push({ nombre, metrosEstimados: metros, cortado: false });
+        if (nombre && metros > 0) tiradas.push({ nombre, categoria, cableRequerido, metrosEstimados: metros, cortado: false });
       });
       if (bobinasSeleccionadas.length === 0 || tiradas.length === 0) {
         document.getElementById('qt-calc-resultado').style.display = 'block';
@@ -241,8 +262,10 @@ window.initDashboard = function() {
         const tiradas = [];
         rows.forEach(row => {
           const nombre = row.querySelector('[data-field="nombre"]').value.trim();
+          const categoria = row.querySelector('[data-field="categoria"]').value;
+          const cableRequerido = row.querySelector('[data-field="cable"]').value;
           const metros = parseFloat(row.querySelector('[data-field="metros"]').value);
-          if (nombre && metros > 0) tiradas.push({ nombre, categoria: 'nodos', metrosEstimados: metros, cortado: false });
+          if (nombre && metros > 0) tiradas.push({ nombre, categoria, cableRequerido, metrosEstimados: metros, cortado: false });
         });
 
         const task = await apiFetch('/tasks/employee-quick-task', {

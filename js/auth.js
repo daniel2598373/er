@@ -8,6 +8,10 @@ window.initAuth = async function() {
 
   // Load users into select
   const usernameSelect = document.getElementById('username');
+  const loaderContainer = document.getElementById('ai-loader-container');
+  const loaderText = document.getElementById('ai-loader-text');
+  const mainLoginCard = document.getElementById('main-login-card');
+
   if (usernameSelect && usernameSelect.tagName === 'SELECT') {
     try {
       const res = await fetch(`${typeof API_BASE !== 'undefined' ? API_BASE : ''}/auth/users`);
@@ -25,6 +29,18 @@ window.initAuth = async function() {
       }
     } catch (e) {
       usernameSelect.innerHTML = '<option value="">Error de conexión</option>';
+    }
+
+    // El servidor ya respondió (está despierto)
+    if (loaderContainer && loaderText && mainLoginCard) {
+      loaderText.textContent = '¡Servidor listo! ✅';
+      setTimeout(() => {
+        loaderContainer.style.opacity = '0';
+        setTimeout(() => {
+          loaderContainer.style.display = 'none';
+          mainLoginCard.classList.remove('hidden');
+        }, 500); // esperar transición
+      }, 800); // mostrar mensaje de éxito por un momento
     }
   }
 

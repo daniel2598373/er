@@ -11,7 +11,18 @@
   <!-- VIEW: LOGIN -->
   <div id="view-login" class="view-container">
     <div class="login-screen">
-      <div class="login-card">
+      <!-- AI Loader Animation -->
+      <div id="ai-loader-container" class="ai-loader-container">
+        <div class="ai-circle-loader">
+          <div class="ai-ring ai-ring-1"></div>
+          <div class="ai-ring ai-ring-2"></div>
+          <div class="ai-ring ai-ring-3"></div>
+          <div class="ai-core"></div>
+        </div>
+        <p id="ai-loader-text" class="ai-loader-text">Despertando servidor en Render...</p>
+      </div>
+
+      <div class="login-card hidden" id="main-login-card">
         <h1>Gestión de tareas</h1>
         <p class="subtitle">Ingresa con tu usuario y contraseña</p>
         <form id="login-form">
@@ -209,6 +220,17 @@
           <form id="bobina-form">
             <label for="bobina-nombre-inv">Nombre de la bobina (Marca/Tipo)</label>
             <input type="text" id="bobina-nombre-inv" required placeholder="Ej. Bobina Belden 1">
+            <label for="bobina-categoria-inv">Categoría / Tipo de Cable</label>
+            <select id="bobina-categoria-inv" required>
+              <option value="utp_cat5e">UTP Cat 5e</option>
+              <option value="utp_cat6">UTP Cat 6</option>
+              <option value="utp_cat6a">UTP Cat 6A</option>
+              <option value="fibra_monomodo">Fibra Monomodo</option>
+              <option value="fibra_multimodo">Fibra Multimodo</option>
+              <option value="control_acceso">Cable Control de Acceso</option>
+              <option value="audio">Cable de Audio</option>
+              <option value="otro">Otro</option>
+            </select>
             <label for="bobina-metros-inv">Metros iniciales</label>
             <input type="number" id="bobina-metros-inv" required placeholder="Ej. 305">
             <button type="submit" class="btn-primary">Registrar en Almacén</button>
@@ -284,6 +306,9 @@
                 <option value="aps">APs</option>
                 <option value="nodos">Nodos</option>
                 <option value="control_acceso">Control de Acceso</option>
+                <option value="enlace_fibr_mono">Enlace Fibra Mono</option>
+                <option value="enlace_fibr_multi">Enlace Fibra Multi</option>
+                <option value="audio">Audio Ambiental</option>
               </select>
               <input type="number" id="tirada-metros-est" placeholder="Metros estimados" required style="width: 100%;">
               <button type="submit" class="btn-primary" style="padding: 10px;">Agregar Tirada</button>
